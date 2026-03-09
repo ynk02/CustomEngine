@@ -84,7 +84,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL;C:\Users\user\source\repos\CustomEngine\CustomEngine\Header</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -101,7 +101,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL;C:\Users\user\source\repos\CustomEngine\CustomEngine\Header</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -116,7 +116,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL;C:\Users\user\source\repos\CustomEngine\CustomEngine\Header</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -133,7 +133,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL;C:\Users\user\source\repos\CustomEngine\CustomEngine\Header</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -154,6 +154,12 @@
     <ClCompile Include="openGL\imgui_impl_opengl3.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="AActor.h" />
+    <ClInclude Include="Header\ACubeActor.h" />
+    <ClInclude Include="Header\CoreMinimal.h" />
+    <ClInclude Include="Header\UPrimitiveComponent.h" />
+    <ClInclude Include="Header\USceneComponent.h" />
+    <ClInclude Include="Header\UStaticMeshComponent.h" />
     <ClInclude Include="imgui\imconfig.h" />
     <ClInclude Include="imgui\imgui.h" />
     <ClInclude Include="imgui\imgui_internal.h" />
@@ -163,6 +169,9 @@
     <ClInclude Include="openGL\imgui_impl_glfw.h" />
     <ClInclude Include="openGL\imgui_impl_opengl3.h" />
     <ClInclude Include="openGL\imgui_impl_opengl3_loader.h" />
+    <ClInclude Include="UActorComponent.h" />
+    <ClInclude Include="UMeshComponent.h" />
+    <ClInclude Include="UObject.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
