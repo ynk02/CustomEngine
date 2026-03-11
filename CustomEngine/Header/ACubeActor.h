@@ -23,7 +23,7 @@ public:
             MeshComponent->SetupCubeMesh();
         }
     }
-     
+    
     virtual void Tick(float DeltaTime) override
     {
         Super::Tick(DeltaTime);
@@ -31,7 +31,7 @@ public:
         if (auto Root = GetRootComponent())
         {
             FRotator CurrentRot = Root->GetRotation();
-            CurrentRot.Yaw += 45.0f * DeltaTime; 
+            CurrentRot.y += 45.0f * DeltaTime; 
             Root->SetRotation(CurrentRot);
         }
     }

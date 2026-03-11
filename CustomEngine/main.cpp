@@ -19,9 +19,10 @@
 #include "AActor.h"
 #include "ACubeActor.h"
 
-// ------------------------------------------------------------------------
-// [셰이더 소스] (수정 없음 - 조명 연산 포함)
-// ------------------------------------------------------------------------
+#include <Assimp/Importer.hpp>
+#include <Assimp/scene.h>
+#include <Assimp/postprocess.h>
+
 const char* vertexShaderSource = "#version 330 core\n"
 "layout (location = 0) in vec3 aPos;\n"
 "layout (location = 1) in vec3 aNormal;\n"
@@ -273,7 +274,7 @@ private:
                 if (auto PrimitiveComp = Cast<UPrimitiveComponent>(Comp)) {
                     FTransform CompTransform = PrimitiveComp->GetTransform();
                     FMatrix ModelMatrix = MakeTransformMatrix(CompTransform);
-                    glUniformMatrix4fv(glGetUniformLocation(ShaderProgram, "model"), 1, GL_FALSE, ModelMatrix.GetPtr());
+                    glUniformMatrix4fv(glGetUniformLocation(ShaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(ModelMatrix));
                     PrimitiveComp->Render();
                 }
             }
@@ -281,29 +282,28 @@ private:
 
         // FBO 렌더링 끝, 기본 프레임버퍼로 복구
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        
     }
 
-    // --- [수정됨] 3D 화면을 출력할 뷰포트 창 추가 ---
     void RenderUI() {
-        // 1. 기존 아웃라이너
+
         ImGui::Begin("World Outliner");
         for (auto& Actor : WorldActors) {
             if (Actor) {
                 if (ImGui::TreeNode(Actor->GetName().c_str())) {
                     FTransform t = Actor->GetTransform();
-                    ImGui::Text("Loc: %.2f %.2f %.2f", t.Location.X, t.Location.Y, t.Location.Z);
-                    ImGui::Text("Rot: %.2f %.2f %.2f", t.Rotation.Pitch, t.Rotation.Yaw, t.Rotation.Roll);
+                    ImGui::Text("Loc: %.2f %.2f %.2f", t.Location.x, t.Location.y, t.Location.z);
+                    ImGui::Text("Rot: %.2f %.2f %.2f", t.Rotation.x, t.Rotation.y, t.Rotation.z);
                     ImGui::TreePop();
                 }
             }
         }
         ImGui::End();
 
-        // 2. 3D 화면 뷰포트
+
         ImGui::Begin("3D Viewport");
         ImVec2 winSize = ImGui::GetContentRegionAvail();
 
-        // FBO 텍스처를 ImGui 이미지로 렌더링 (uv 좌표 반전으로 상하 뒤집힘 해결)
         ImGui::Image((void*)(intptr_t)TextureColor, winSize, ImVec2(0, 1), ImVec2(1, 0));
 
         ImGui::End();
@@ -331,17 +331,16 @@ private:
     float LastFrameTime = 0.0f;
     unsigned int ShaderProgram;
 
-    // Engine "World" state
+
     std::vector<TSharedPtr<AActor>> WorldActors;
 
-    // --- [추가됨] FBO 멤버 변수 ---
     unsigned int FBO, TextureColor, RBO;
-    int TexWidth = 1280; // 렌더링 해상도
-    int TexHeight = 720;
+    int TexWidth = m_Width; // 렌더링 해상도
+    int TexHeight = m_Height;
 };
 
 int main() {
-    Application app(1280, 720, "Custom Engine");
+    Application app(3840, 2160, "Custom Engine");
     if (!app.Init()) {
         std::cerr << "Engine Initialization Failed" << std::endl;
         return -1;

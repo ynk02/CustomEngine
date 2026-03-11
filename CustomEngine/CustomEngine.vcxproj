@@ -84,13 +84,13 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL;C:\Users\user\source\repos\CustomEngine\CustomEngine\Header;C:\Users\user\source\repos\CustomEngine\CustomEngine\glm</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL;C:\Users\user\source\repos\CustomEngine\CustomEngine\Header;C:\Users\user\source\repos\CustomEngine\CustomEngine\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>glfw3.lib;opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>glfw3.lib;opengl32.lib;assimp-vc143-mt.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -101,13 +101,13 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL;C:\Users\user\source\repos\CustomEngine\CustomEngine\Header;C:\Users\user\source\repos\CustomEngine\CustomEngine\glm</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL;C:\Users\user\source\repos\CustomEngine\CustomEngine\Header;C:\Users\user\source\repos\CustomEngine\CustomEngine\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>glfw3.lib;opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>glfw3.lib;opengl32.lib;assimp-vc143-mt.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -116,13 +116,13 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL;C:\Users\user\source\repos\CustomEngine\CustomEngine\Header;C:\Users\user\source\repos\CustomEngine\CustomEngine\glm</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL;C:\Users\user\source\repos\CustomEngine\CustomEngine\Header;C:\Users\user\source\repos\CustomEngine\CustomEngine\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>glfw3.lib;opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>glfw3.lib;opengl32.lib;assimp-vc143-mt.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -133,13 +133,13 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL;C:\Users\user\source\repos\CustomEngine\CustomEngine\Header;C:\Users\user\source\repos\CustomEngine\CustomEngine\glm</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL;C:\Users\user\source\repos\CustomEngine\CustomEngine\Header;C:\Users\user\source\repos\CustomEngine\CustomEngine\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>glfw3.lib;opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>glfw3.lib;opengl32.lib;assimp-vc143-mt.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>

@@ -19,7 +19,7 @@ public:
     FRotator GetRotation() const { return ComponentTransform.Rotation; }
     void SetRotation(const FRotator& InRotation) { ComponentTransform.Rotation = InRotation; }
 
-    // Hierarchy functionality
+
     void SetupAttachment(USceneComponent* InParent)
     {
         AttachParent = InParent;

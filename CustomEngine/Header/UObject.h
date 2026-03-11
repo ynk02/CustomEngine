@@ -5,7 +5,6 @@
 #include <string>
 #include <vector>
 
-using FString = std::string;
 
 template<typename T> using TSharedPtr = std::shared_ptr<T>;
 template<typename T> using TWeakPtr = std::weak_ptr<T>;
