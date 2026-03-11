@@ -84,7 +84,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL;C:\Users\user\source\repos\CustomEngine\CustomEngine\Header</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL;C:\Users\user\source\repos\CustomEngine\CustomEngine\Header;C:\Users\user\source\repos\CustomEngine\CustomEngine\glm</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -101,7 +101,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL;C:\Users\user\source\repos\CustomEngine\CustomEngine\Header</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL;C:\Users\user\source\repos\CustomEngine\CustomEngine\Header;C:\Users\user\source\repos\CustomEngine\CustomEngine\glm</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -116,7 +116,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL;C:\Users\user\source\repos\CustomEngine\CustomEngine\Header</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL;C:\Users\user\source\repos\CustomEngine\CustomEngine\Header;C:\Users\user\source\repos\CustomEngine\CustomEngine\glm</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -133,7 +133,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL;C:\Users\user\source\repos\CustomEngine\CustomEngine\Header</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include;C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui;C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL;C:\Users\user\source\repos\CustomEngine\CustomEngine\Header;C:\Users\user\source\repos\CustomEngine\CustomEngine\glm</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

@@ -1,6 +1,9 @@
 #pragma once
 
 #include <cmath>
+#include<glm.hpp>
+
+
 
 struct FVector
 {
@@ -83,25 +86,49 @@ inline FMatrix MakeScaleMatrix(const FVector& Scale)
 
 inline FMatrix MakeRotationMatrix(const FRotator& Rot)
 {
-    FMatrix MatX, MatY, MatZ;
-    float RadP = Rot.Pitch * 3.14159265f / 180.0f;
-    float RadY = Rot.Yaw   * 3.14159265f / 180.0f;
-    float RadR = Rot.Roll  * 3.14159265f / 180.0f;
+    // OpenGL column-major: M[col * 4 + row]
+    // Index layout:
+    //  M[0]  M[4]  M[8]  M[12]
+    //  M[1]  M[5]  M[9]  M[13]
+    //  M[2]  M[6]  M[10] M[14]
+    //  M[3]  M[7]  M[11] M[15]
 
+    float RadP = Rot.Pitch * 3.14159265f / 180.0f; // Rotation around X axis
+    float RadY = Rot.Yaw   * 3.14159265f / 180.0f; // Rotation around Y axis
+    float RadR = Rot.Roll  * 3.14159265f / 180.0f; // Rotation around Z axis
+
+    // Pitch: rotation around X axis
+    //  1    0     0    0
+    //  0   cP   -sP   0
+    //  0   sP    cP   0
+    //  0    0     0   1
+    FMatrix MatX;
     float cP = std::cos(RadP), sP = std::sin(RadP);
-    MatX.M[5] = cP; MatX.M[6] = sP;
-    MatX.M[9] = -sP; MatX.M[10] = cP;
+    MatX.M[5]  =  cP;  MatX.M[9]  = -sP;
+    MatX.M[6]  =  sP;  MatX.M[10] =  cP;
 
+    // Yaw: rotation around Y axis
+    //  cY   0   sY   0
+    //   0   1    0   0
+    // -sY   0   cY   0
+    //   0   0    0   1
+    FMatrix MatY;
     float cY = std::cos(RadY), sY = std::sin(RadY);
-    MatY.M[0] = cY; MatY.M[2] = -sY;
-    MatY.M[8] = sY; MatY.M[10] = cY;
+    MatY.M[0]  =  cY;  MatY.M[8]  =  sY;
+    MatY.M[2]  = -sY;  MatY.M[10] =  cY;
 
+    // Roll: rotation around Z axis
+    //  cR  -sR   0   0
+    //  sR   cR   0   0
+    //   0    0   1   0
+    //   0    0   0   1
+    FMatrix MatZ;
     float cR = std::cos(RadR), sR = std::sin(RadR);
-    MatZ.M[0] = cR; MatZ.M[1] = sR;
-    MatZ.M[4] = -sR; MatZ.M[5] = cR;
+    MatZ.M[0]  =  cR;  MatZ.M[4]  = -sR;
+    MatZ.M[1]  =  sR;  MatZ.M[5]  =  cR;
 
-    // Pitch * Yaw * Roll (combining rotations)
-    return MatZ * MatY * MatX;
+    // Combined: Yaw * Pitch * Roll (applied right to left)
+    return MatY * MatX * MatZ;
 }
 
 inline FMatrix MakeTransformMatrix(const FTransform& Transform)

@@ -8,7 +8,6 @@ class ACubeActor : public AActor
 public:
     ACubeActor()
     {
-        // UE5 style: CreateDefaultSubobject in constructor
         MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>("CubeMesh");
         
         // Set as Root Component
@@ -19,7 +18,6 @@ public:
     {
         Super::BeginPlay();
 
-        // Initialize OpenGL buffers for the cube
         if (MeshComponent)
         {
             MeshComponent->SetupCubeMesh();
@@ -30,11 +28,10 @@ public:
     {
         Super::Tick(DeltaTime);
 
-        // Example: Rotate the cube every frame
         if (auto Root = GetRootComponent())
         {
             FRotator CurrentRot = Root->GetRotation();
-            CurrentRot.Yaw += 45.0f * DeltaTime; // Rotate 45 degrees per second
+            CurrentRot.Yaw += 45.0f * DeltaTime; 
             Root->SetRotation(CurrentRot);
         }
     }
