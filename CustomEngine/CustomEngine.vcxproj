@@ -156,6 +156,8 @@
   <ItemGroup>
     <ClInclude Include="AActor.h" />
     <ClInclude Include="Header\ACubeActor.h" />
+    <ClInclude Include="Header\AFloorActor.h" />
+
     <ClInclude Include="Header\CoreMinimal.h" />
     <ClInclude Include="Header\UPrimitiveComponent.h" />
     <ClInclude Include="Header\USceneComponent.h" />

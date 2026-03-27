@@ -31,8 +31,8 @@ public:
         if (auto Root = GetRootComponent())
         {
             FRotator CurrentRot = Root->GetRotation();
-            CurrentRot.y += 45.0f * DeltaTime; 
-            Root->SetRotation(CurrentRot);
+            //CurrentRot.y += 45.0f * DeltaTime; 
+            //Root->SetRotation(CurrentRot);
         }
     }
 
