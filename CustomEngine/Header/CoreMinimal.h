@@ -3,6 +3,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <string>
+
 
 using FString = std::string;
 using FVector = glm::vec3;
@@ -37,7 +39,7 @@ inline FMatrix MakeTransformMatrix(const FTransform& Transform)
     return Mat;
 }
 
-FMatrix MakeProjectionMatrix(float FOV, float AspectRatio, float NearPlane, float FarPlane)
+inline FMatrix MakeProjectionMatrix(float FOV, float AspectRatio, float NearPlane, float FarPlane)
 {
     return glm::perspective(glm::radians(FOV), AspectRatio, NearPlane, FarPlane);
 }

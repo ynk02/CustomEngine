@@ -1,3 +1,17 @@
+// ============================================================
+//  main.cpp — Custom Engine Entry Point
+//  
+//  아키텍처 레이어:
+//    [Physics]   IPhysicsSystem → IPhysicsScene → IPhysicsActor
+//    [Actor]     AActor (URigidBodyComponent 소유) → Transform 동기화
+//    [Editor]    UWorldOutliner / UDetailsPanel → ImGui 패널
+//    [Renderer]  OpenGL + FBO → ImGui Viewport
+//
+//  Fixed-step 물리 vs. 가변 렌더 Tick 분리:
+//    PhysicsAccumulator 누적 → FixedStep 단위로 Simulate() 호출
+//    렌더/임구이는 매 프레임 실행
+// ============================================================
+
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
@@ -5,13 +19,14 @@
 #include <vector>
 #include <algorithm>
 #include <cfloat>
+#include <functional>
 
 // ImGui
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 
-// Custom Engine Headers
+// Engine Core
 #include "CoreMinimal.h"
 #include "UObject.h"
 #include "UActorComponent.h"
@@ -21,119 +36,83 @@
 #include "AActor.h"
 #include "ACubeActor.h"
 #include "AFloorActor.h"
+#include "FCamera.h"
+#include "FRay.h"
+#include "UShader.h"
+#include "URigidBodyComponent.h"
+
+// Physics Abstraction (인터페이스만 포함 — 구현체 모름)
+#include "Physics/IPhysicsSystem.h"
+#include "Physics/IPhysicsScene.h"
+#include "Physics/IPhysicsActor.h"
+// AVBD 설정 구조체 접근용 (에디터 Config 패널 한정)
+#include "Physics/AVBDPhysicsSystem.h"
+
+// Editor Panels
+#include "Editor/UWorldOutliner.h"
+#include "Editor/UDetailsPanel.h"
 
 #include <Assimp/Importer.hpp>
 #include <Assimp/scene.h>
 #include <Assimp/postprocess.h>
 
-const char* vertexShaderSource = "#version 330 core\n"
-"layout (location = 0) in vec3 aPos;\n"
-"layout (location = 1) in vec3 aNormal;\n"
-"out vec3 Normal;\n"
-"out vec3 FragPos;\n"
-"uniform mat4 model;\n"
-"uniform mat4 view;\n"
-"uniform mat4 projection;\n"
-"void main()\n"
-"{\n"
-"   gl_Position = projection * view * model * vec4(aPos, 1.0);\n"
-"   FragPos = vec3(model * vec4(aPos, 1.0));\n"
-"   Normal = mat3(transpose(inverse(model))) * aNormal;\n"
-"}\0";
+// ============================================================
+//  Constants
+// ============================================================
+static constexpr float PHYSICS_FIXED_STEP = 1.0f / 60.0f; // 60Hz 물리 시뮬레이션
 
-const char* fragmentShaderSource = "#version 330 core\n"
-"out vec4 FragColor;\n"
-"in vec3 Normal;\n"
-"in vec3 FragPos;\n"
-"uniform vec3 objectColor;\n"
-"uniform bool bSelected;\n"
-"void main()\n"
-"{\n"
-"   vec3 lightDir = normalize(vec3(1.0, 2.0, 1.0));\n"
-"   float diff = max(dot(normalize(Normal), lightDir), 0.0);\n"
-"   vec3 ambient = 0.25 * objectColor;\n"
-"   vec3 diffuse = diff * objectColor;\n"
-"   vec3 col = ambient + diffuse;\n"
-"   if (bSelected) col = mix(col, vec3(1.0, 0.8, 0.2), 0.35);\n"
-"   FragColor = vec4(col, 1.0);\n"
-"}\n\0";
 
-// -----------------------------------------------------------------------
-// Ray
-// -----------------------------------------------------------------------
-struct FRay {
-    glm::vec3 Origin;
-    glm::vec3 Direction;
-};
-
-// -----------------------------------------------------------------------
-// Camera
-// -----------------------------------------------------------------------
-struct FCamera {
-    glm::vec3 Position  = { 0.0f, 3.0f, 10.0f };
-    float     Yaw       = -90.0f;
-    float     Pitch     = -15.0f;
-    float     MoveSpeed = 5.0f;
-    float     Sensitivity = 0.15f;
-
-    glm::vec3 Front  = { 0.0f, 0.0f, -1.0f };
-    glm::vec3 Right  = { 1.0f, 0.0f,  0.0f };
-    glm::vec3 WorldUp= { 0.0f, 1.0f,  0.0f };
-
-    void UpdateVectors()
-    {
-        glm::vec3 front;
-        front.x = cos(glm::radians(Yaw)) * cos(glm::radians(Pitch));
-        front.y = sin(glm::radians(Pitch));
-        front.z = sin(glm::radians(Yaw)) * cos(glm::radians(Pitch));
-        Front = glm::normalize(front);
-        Right = glm::normalize(glm::cross(Front, WorldUp));
-    }
-
-    glm::mat4 GetViewMatrix() const
-    {
-        return glm::lookAt(Position, Position + Front, WorldUp);
-    }
-};
-
-// -----------------------------------------------------------------------
-// Application
-// -----------------------------------------------------------------------
-class Application {
+// ============================================================
+//  UApplication
+// ============================================================
+class UApplication : public UObject
+{
 public:
-    Application(int width, int height, const std::string& title)
-        : m_Width(width), m_Height(height), m_Title(title),
-          m_Window(nullptr), ShaderProgram(0),
-          FBO(0), TextureColor(0), RBO(0), TexWidth(1), TexHeight(1)
+    UApplication(int width, int height, const std::string& title)
+        : m_Width(width), m_Height(height), m_Title(title)
+        , m_Window(nullptr)
+        , FBO(0), TextureColor(0), RBO(0)
+        , TexWidth(1), TexHeight(1)
     {}
 
-    ~Application() { Shutdown(); }
+    ~UApplication() { Shutdown(); }
 
     bool Init()
     {
-        if (!InitGLFW()) return false;
-        if (!InitGLAD()) return false;
+        if (!InitGLFW())  return false;
+        if (!InitGLAD())  return false;
         InitImGui();
-        CompileShaders();
+
+        Shader = UShader::CreateFromFiles("Shaders/Shader.vert", "Shaders/Shader.frag");
         CreateFBO(m_Width, m_Height);
 
-        // Store app pointer on GLFW window for callbacks
         glfwSetWindowUserPointer(m_Window, this);
-
-        // ---- Live resize during window drag (Windows blocks PollEvents) ----
         glfwSetWindowRefreshCallback(m_Window, [](GLFWwindow* w) {
-            auto* app = static_cast<Application*>(glfwGetWindowUserPointer(w));
+            auto* app = static_cast<UApplication*>(glfwGetWindowUserPointer(w));
             if (app) app->RenderOneFrame(0.016f);
         });
 
-        // ---- Default floor plane ----
-        TSharedPtr<AFloorActor> Floor = MakeShared<AFloorActor>();
+        // ---- 물리 시스템 초기화 (Factory — 인터페이스만 이후 사용됨) ----
+        CurrentBackend = EPhysicsBackend::Null;
+        PhysicsSystem  = IPhysicsSystem::Create(CurrentBackend);
+        PhysicsSystem->Initialize();
+
+        PhysicsScene = PhysicsSystem->CreateScene();
+        PhysicsScene->Initialize(FVector(0.0f, -9.81f, 0.0f));
+
+        // ---- 에디터 패널 생성 ----
+        WorldOutliner = std::make_unique<UWorldOutliner>();
+        DetailsPanel  = std::make_unique<UDetailsPanel>();
+
+        // ---- Default world setup ----
+        // 바닥 (Static — 물리 시뮬레이션 없음)
+        auto Floor = MakeShared<AFloorActor>();
         Floor->SetName("Floor");
         Floor->SetTransform(FTransform(FVector(0,0,0), FRotator(0,0,0), FVector(1,1,1)));
         WorldActors.push_back(Floor);
 
-        // ---- Default cube ----
-        SpawnCube("Cube_0", FVector(0.0f, 0.5f, 0.0f));
+        // 기본 큐브 (물리 활성화)
+        SpawnCube("Cube_0", FVector(0.0f, 3.0f, 0.0f));
 
         LastFrameTime = (float)glfwGetTime();
 
@@ -149,11 +128,33 @@ public:
         while (!glfwWindowShouldClose(m_Window))
         {
             float now = (float)glfwGetTime();
-            float dt  = now - LastFrameTime;
+            float dt  = glm::clamp(now - LastFrameTime, 0.0f, 0.1f); // 최대 0.1s cap
             LastFrameTime = now;
 
             glfwPollEvents();
 
+            // ── 백엔드 전환 요청 처리 (Tick 시작 전 안전한 시점) ──────
+            if (bPendingBackendSwitch)
+            {
+                DoSwitchPhysicsBackend(PendingBackend);
+                bPendingBackendSwitch = false;
+            }
+
+            // ====================================================
+            //  Fixed-Step 물리 시뮬레이션 (렌더 Tick과 분리)
+            //  PhysicsAccumulator에 dt를 누적하고 고정 스텝마다 Simulate.
+            // ====================================================
+            PhysicsAccumulator += dt;
+            while (PhysicsAccumulator >= PHYSICS_FIXED_STEP)
+            {
+                PhysicsScene->Simulate(PHYSICS_FIXED_STEP);
+                PhysicsAccumulator -= PHYSICS_FIXED_STEP;
+            }
+
+            // ====================================================
+            //  메인 Tick (렌더 프레임마다)
+            //  URigidBodyComponent::TickComponent()가 물리 결과 → Transform 동기화
+            // ====================================================
             for (auto& Actor : WorldActors)
                 if (Actor) Actor->Tick(dt);
 
@@ -161,7 +162,6 @@ public:
         }
     }
 
-    // Public: called from the window-refresh callback during resize
     void RenderOneFrame(float dt)
     {
         BeginFrame();
@@ -170,9 +170,326 @@ public:
     }
 
 private:
-    // ----------------------------------------------------------------
-    // FBO
-    // ----------------------------------------------------------------
+    // ============================================================
+    //  Spawn
+    // ============================================================
+    void SpawnCube(const std::string& Name, const FVector& Location)
+    {
+        auto Cube = MakeShared<ACubeActor>();
+        Cube->SetName(Name);
+
+        FTransform InitialTransform(Location, FRotator(0,0,0), FVector(1,1,1));
+        Cube->SetTransform(InitialTransform);
+
+        // ★ 물리 씬에 등록 (BeginPlay 전에 수행)
+        if (URigidBodyComponent* RB = Cube->GetRigidBodyComponent())
+        {
+            RB->SetHalfExtents(FVector(0.5f)); // 큐브 기본 반경
+            RB->RegisterWithPhysicsScene(PhysicsScene.get(), InitialTransform);
+        }
+
+        WorldActors.push_back(Cube);
+        Cube->BeginPlay();
+    }
+
+    // ============================================================
+    //  Physics Backend Runtime Switch
+    //  백엔드를 교체할 때 안전하게 씬을 재생성하고
+    //  모든 URigidBodyComponent를 새 씬에 재등록한다.
+    // ============================================================
+    void RequestSwitchPhysicsBackend(EPhysicsBackend NewBackend)
+    {
+        if (NewBackend == CurrentBackend) return;
+        PendingBackend        = NewBackend;
+        bPendingBackendSwitch = true;
+    }
+
+    void DoSwitchPhysicsBackend(EPhysicsBackend NewBackend)
+    {
+        // 1. 기존 씬 파괴 전에 모든 RigidBody 포인터 무효화
+        //    (URigidBodyComponent 소멸자가 RemoveActor 호출하지 않도록)
+        for (auto& Actor : WorldActors)
+        {
+            if (!Actor) continue;
+            for (auto& Comp : Actor->GetComponents())
+            {
+                if (auto RB = Cast<URigidBodyComponent>(Comp))
+                    RB->DetachFromPhysicsScene(); // 포인터만 null, 씬은 별도 파괴
+            }
+        }
+
+        // 2. 새 System + Scene 생성
+        PhysicsScene.reset();
+        PhysicsSystem->Shutdown();
+        PhysicsSystem = IPhysicsSystem::Create(NewBackend);
+        PhysicsSystem->Initialize();
+        PhysicsScene = PhysicsSystem->CreateScene();
+
+        FVector Gravity = FVector(0.0f, WorldGravityY, 0.0f);
+        PhysicsScene->Initialize(Gravity);
+
+        // 3. 모든 큐브를 새 씬에 재등록 (현재 Transform 유지, 속도 0)
+        for (auto& Actor : WorldActors)
+        {
+            if (!Actor) continue;
+            if (URigidBodyComponent* RB = dynamic_cast<URigidBodyComponent*>(
+                    Actor->GetRootComponent()))
+            {
+                RB->RegisterWithPhysicsScene(PhysicsScene.get(),
+                                             Actor->GetTransform());
+            }
+        }
+
+        CurrentBackend = NewBackend;
+        PhysicsAccumulator = 0.0f;
+    }
+
+    // ============================================================
+    //  Ray Helpers (Viewport 픽킹)
+    // ============================================================
+    FRay ComputeRayFromMouse(float mouseX, float mouseY, int viewW, int viewH) const
+    {
+        float nx =  (mouseX / viewW) * 2.0f - 1.0f;
+        float ny = -(mouseY / viewH) * 2.0f + 1.0f;
+
+        glm::vec4 rayClip  = glm::vec4(nx, ny, -1.0f, 1.0f);
+        glm::vec4 rayEye   = glm::inverse(LastProjection) * rayClip;
+        rayEye             = glm::vec4(rayEye.x, rayEye.y, -1.0f, 0.0f);
+        glm::vec3 rayWorld = glm::normalize(glm::vec3(glm::inverse(LastView) * rayEye));
+
+        return { Cam.Position, rayWorld };
+    }
+
+    /**
+     * ★ 물리 엔진의 Raycast를 사용해 Actor 픽킹.
+     * IPhysicsScene::Raycast() → FRaycastHit → Actor 역추적.
+     */
+    void TrySelectActorAtMouse(float mouseX, float mouseY, int viewW, int viewH)
+    {
+        FRay Ray = ComputeRayFromMouse(mouseX, mouseY, viewW, viewH);
+
+        // 1. 물리 씬 Raycast (물리 컴포넌트가 등록된 Actor들 대상)
+        FRaycastHit Hit = PhysicsScene->Raycast(Ray, 1000.0f);
+
+        if (Hit.bHit && Hit.HitActor)
+        {
+            // IPhysicsActor 포인터 → Actor 역추적
+            int FoundIdx = FindActorByPhysicsActor(Hit.HitActor);
+            if (FoundIdx >= 0)
+            {
+                SelectedActorIndex = FoundIdx;
+                return;
+            }
+        }
+
+        // 2. 물리 Actor 없는 오브젝트(Floor 등) — 기존 AABB 폴백
+        SelectedActorIndex = RaycastAABBFallback(Ray);
+    }
+
+    int FindActorByPhysicsActor(IPhysicsActor* Target) const
+    {
+        for (int i = 0; i < (int)WorldActors.size(); ++i)
+        {
+            if (!WorldActors[i]) continue;
+            for (const auto& Comp : WorldActors[i]->GetComponents())
+            {
+                if (auto RB = Cast<URigidBodyComponent>(Comp))
+                {
+                    if (RB->GetPhysicsActor() == Target)
+                        return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    // 물리 컴포넌트 없는 Actor용 AABB 폴백 (Floor 등)
+    int RaycastAABBFallback(const FRay& Ray) const
+    {
+        float ClosestT  = FLT_MAX;
+        int   ClosestIdx = -1;
+
+        for (int i = 0; i < (int)WorldActors.size(); ++i)
+        {
+            const auto& Actor = WorldActors[i];
+            if (!Actor) continue;
+
+            FTransform T    = Actor->GetTransform();
+            FVector    Half = T.Scale3D * 0.5f;
+            FVector    Mn   = T.Location - Half;
+            FVector    Mx   = T.Location + Half;
+
+            float tMin = -FLT_MAX, tMax = FLT_MAX;
+            bool  bHit = true;
+
+            for (int Axis = 0; Axis < 3; ++Axis)
+            {
+                if (std::abs(Ray.Direction[Axis]) < 1e-6f)
+                {
+                    if (Ray.Origin[Axis] < Mn[Axis] || Ray.Origin[Axis] > Mx[Axis])
+                    { bHit = false; break; }
+                }
+                else
+                {
+                    float t1 = (Mn[Axis] - Ray.Origin[Axis]) / Ray.Direction[Axis];
+                    float t2 = (Mx[Axis] - Ray.Origin[Axis]) / Ray.Direction[Axis];
+                    if (t1 > t2) std::swap(t1, t2);
+                    tMin = std::max(tMin, t1);
+                    tMax = std::min(tMax, t2);
+                    if (tMin > tMax) { bHit = false; break; }
+                }
+            }
+
+            if (bHit)
+            {
+                float tHit = (tMin > 0.0f) ? tMin : tMax;
+                if (tHit > 0.0f && tHit < ClosestT)
+                {
+                    ClosestT   = tHit;
+                    ClosestIdx = i;
+                }
+            }
+        }
+        return ClosestIdx;
+    }
+
+    // Actor Drag (물리 비활성화 중 or Kinematic 이동)
+    void BeginActorDrag(float mouseX, float mouseY, int viewW, int viewH)
+    {
+        if (SelectedActorIndex < 0 || SelectedActorIndex >= (int)WorldActors.size()) return;
+        auto& Actor = WorldActors[SelectedActorIndex];
+        if (!Actor) return;
+
+        FRay ray   = ComputeRayFromMouse(mouseX, mouseY, viewW, viewH);
+        DragPlaneY = Actor->GetTransform().Location.y;
+
+        if (std::abs(ray.Direction.y) > 1e-6f)
+        {
+            float t = (DragPlaneY - ray.Origin.y) / ray.Direction.y;
+            if (t > 0.0f)
+            {
+                DragHitOffset    = ray.Origin + t * ray.Direction - Actor->GetTransform().Location;
+                bIsDraggingActor = true;
+            }
+        }
+    }
+
+    void UpdateActorDrag(float mouseX, float mouseY, int viewW, int viewH)
+    {
+        if (!bIsDraggingActor || SelectedActorIndex < 0) return;
+        auto& Actor = WorldActors[SelectedActorIndex];
+        if (!Actor) return;
+
+        FRay ray = ComputeRayFromMouse(mouseX, mouseY, viewW, viewH);
+        if (std::abs(ray.Direction.y) > 1e-6f)
+        {
+            float t = (DragPlaneY - ray.Origin.y) / ray.Direction.y;
+            if (t > 0.0f)
+            {
+                FVector NewLoc  = ray.Origin + t * ray.Direction - DragHitOffset;
+                NewLoc.y        = DragPlaneY;
+                FTransform Trans = Actor->GetTransform();
+                Trans.Location   = NewLoc;
+
+                // 물리 컴포넌트가 있으면 텔레포트 동기화
+                for (const auto& Comp : Actor->GetComponents())
+                {
+                    if (auto RB = Cast<URigidBodyComponent>(Comp))
+                    {
+                        RB->SyncTransformToPhysics(Trans);
+                        return;
+                    }
+                }
+                Actor->SetTransform(Trans);
+            }
+        }
+    }
+
+    // ============================================================
+    //  Init Helpers
+    // ============================================================
+    bool InitGLFW()
+    {
+        if (!glfwInit()) return false;
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        m_Window = glfwCreateWindow(m_Width, m_Height, m_Title.c_str(), NULL, NULL);
+        if (!m_Window) { glfwTerminate(); return false; }
+        glfwMakeContextCurrent(m_Window);
+        glfwSwapInterval(1);
+        return true;
+    }
+
+    bool InitGLAD()
+    {
+        return gladLoadGLLoader((GLADloadproc)glfwGetProcAddress) != 0;
+    }
+
+    void InitImGui()
+    {
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO(); (void)io;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+        ImGui::StyleColorsDark();
+
+        // 커스텀 스타일링
+        ImGuiStyle& Style = ImGui::GetStyle();
+        Style.WindowRounding   = 6.0f;
+        Style.FrameRounding    = 4.0f;
+        Style.PopupRounding    = 4.0f;
+        Style.ScrollbarRounding= 4.0f;
+        Style.GrabRounding     = 4.0f;
+        Style.TabRounding      = 4.0f;
+        Style.FramePadding     = ImVec2(6.0f, 4.0f);
+        Style.ItemSpacing      = ImVec2(8.0f, 6.0f);
+
+        ImVec4* Colors = Style.Colors;
+        Colors[ImGuiCol_WindowBg]       = ImVec4(0.10f, 0.11f, 0.13f, 1.00f);
+        Colors[ImGuiCol_Header]         = ImVec4(0.20f, 0.40f, 0.70f, 0.40f);
+        Colors[ImGuiCol_HeaderHovered]  = ImVec4(0.26f, 0.59f, 0.98f, 0.60f);
+        Colors[ImGuiCol_HeaderActive]   = ImVec4(0.26f, 0.59f, 0.98f, 0.80f);
+        Colors[ImGuiCol_TitleBgActive]  = ImVec4(0.12f, 0.22f, 0.40f, 1.00f);
+        Colors[ImGuiCol_FrameBg]        = ImVec4(0.16f, 0.18f, 0.22f, 1.00f);
+        Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.22f, 0.26f, 0.32f, 1.00f);
+        Colors[ImGuiCol_Button]         = ImVec4(0.20f, 0.45f, 0.80f, 0.60f);
+        Colors[ImGuiCol_ButtonHovered]  = ImVec4(0.26f, 0.59f, 0.98f, 0.80f);
+        Colors[ImGuiCol_Tab]            = ImVec4(0.12f, 0.20f, 0.35f, 0.90f);
+        Colors[ImGuiCol_TabActive]      = ImVec4(0.20f, 0.40f, 0.70f, 1.00f);
+
+        ImGui_ImplGlfw_InitForOpenGL(m_Window, true);
+        ImGui_ImplOpenGL3_Init("#version 330 core");
+    }
+
+    void Shutdown()
+    {
+        if (m_Window)
+        {
+            WorldActors.clear();
+
+            // 물리 시스템 종료 (Actor 전부 제거된 후)
+            if (PhysicsScene) PhysicsScene.reset();
+            if (PhysicsSystem) { PhysicsSystem->Shutdown(); PhysicsSystem.reset(); }
+
+            if (FBO)          glDeleteFramebuffers(1,  &FBO);
+            if (TextureColor) glDeleteTextures(1,       &TextureColor);
+            if (RBO)          glDeleteRenderbuffers(1,  &RBO);
+
+            ImGui_ImplOpenGL3_Shutdown();
+            ImGui_ImplGlfw_Shutdown();
+            ImGui::DestroyContext();
+            glfwDestroyWindow(m_Window);
+            glfwTerminate();
+            m_Window = nullptr;
+        }
+    }
+
+    // ============================================================
+    //  FBO
+    // ============================================================
     void CreateFBO(int w, int h)
     {
         if (FBO)          { glDeleteFramebuffers(1,  &FBO);          FBO = 0; }
@@ -203,216 +520,9 @@ private:
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
-    // ----------------------------------------------------------------
-    // Spawn
-    // ----------------------------------------------------------------
-    void SpawnCube(const std::string& Name, const FVector& Location)
-    {
-        auto Cube = MakeShared<ACubeActor>();
-        Cube->SetName(Name);
-        Cube->SetTransform(FTransform(Location, FRotator(0,0,0), FVector(1,1,1)));
-        WorldActors.push_back(Cube);
-        Cube->BeginPlay();
-    }
-
-    // ----------------------------------------------------------------
-    // Ray helpers
-    // ----------------------------------------------------------------
-    FRay ComputeRayFromMouse(float mouseX, float mouseY, int viewW, int viewH) const
-    {
-        float nx =  (mouseX / viewW)  * 2.0f - 1.0f;
-        float ny = -(mouseY / viewH)  * 2.0f + 1.0f;
-
-        glm::vec4 rayClip = glm::vec4(nx, ny, -1.0f, 1.0f);
-        glm::vec4 rayEye  = glm::inverse(LastProjection) * rayClip;
-        rayEye = glm::vec4(rayEye.x, rayEye.y, -1.0f, 0.0f);
-        glm::vec3 rayWorld = glm::normalize(glm::vec3(glm::inverse(LastView) * rayEye));
-
-        return { Cam.Position, rayWorld };
-    }
-
-    static bool RayAABBIntersect(const FRay& ray,
-                                  const glm::vec3& aabbMin,
-                                  const glm::vec3& aabbMax,
-                                  float& tOut)
-    {
-        float tMin = -FLT_MAX, tMax = FLT_MAX;
-        for (int i = 0; i < 3; ++i)
-        {
-            if (std::abs(ray.Direction[i]) < 1e-6f)
-            {
-                if (ray.Origin[i] < aabbMin[i] || ray.Origin[i] > aabbMax[i]) return false;
-            }
-            else
-            {
-                float t1 = (aabbMin[i] - ray.Origin[i]) / ray.Direction[i];
-                float t2 = (aabbMax[i] - ray.Origin[i]) / ray.Direction[i];
-                if (t1 > t2) std::swap(t1, t2);
-                tMin = std::max(tMin, t1);
-                tMax = std::min(tMax, t2);
-                if (tMin > tMax) return false;
-            }
-        }
-        tOut = (tMin > 0.0f) ? tMin : tMax;
-        return tOut > 0.0f;
-    }
-
-    void TrySelectActorAtMouse(float mouseX, float mouseY, int viewW, int viewH)
-    {
-        FRay ray = ComputeRayFromMouse(mouseX, mouseY, viewW, viewH);
-
-        float closestT   = FLT_MAX;
-        int   closestIdx = -1;
-
-        for (int i = 0; i < (int)WorldActors.size(); ++i)
-        {
-            auto& actor = WorldActors[i];
-            if (!actor || actor->GetName() == "Floor") continue;
-
-            FTransform t  = actor->GetTransform();
-            glm::vec3 half = t.Scale3D * 0.5f;
-            glm::vec3 mn   = t.Location - half;
-            glm::vec3 mx   = t.Location + half;
-
-            float hitT;
-            if (RayAABBIntersect(ray, mn, mx, hitT) && hitT < closestT)
-            {
-                closestT   = hitT;
-                closestIdx = i;
-            }
-        }
-
-        SelectedActorIndex = closestIdx;
-    }
-
-    // Begin drag: record the offset of the mouse-hit from the actor's origin on XZ plane
-    void BeginActorDrag(float mouseX, float mouseY, int viewW, int viewH)
-    {
-        if (SelectedActorIndex < 0 || SelectedActorIndex >= (int)WorldActors.size()) return;
-        auto& actor = WorldActors[SelectedActorIndex];
-        if (!actor) return;
-
-        FRay ray     = ComputeRayFromMouse(mouseX, mouseY, viewW, viewH);
-        DragPlaneY   = actor->GetTransform().Location.y;
-
-        if (std::abs(ray.Direction.y) > 1e-6f)
-        {
-            float t = (DragPlaneY - ray.Origin.y) / ray.Direction.y;
-            if (t > 0.0f)
-            {
-                glm::vec3 hitPt = ray.Origin + t * ray.Direction;
-                DragHitOffset = hitPt - actor->GetTransform().Location;
-                bIsDraggingActor = true;
-            }
-        }
-    }
-
-    void UpdateActorDrag(float mouseX, float mouseY, int viewW, int viewH)
-    {
-        if (!bIsDraggingActor || SelectedActorIndex < 0) return;
-        auto& actor = WorldActors[SelectedActorIndex];
-        if (!actor) return;
-
-        FRay ray = ComputeRayFromMouse(mouseX, mouseY, viewW, viewH);
-
-        if (std::abs(ray.Direction.y) > 1e-6f)
-        {
-            float t = (DragPlaneY - ray.Origin.y) / ray.Direction.y;
-            if (t > 0.0f)
-            {
-                glm::vec3 hitPt  = ray.Origin + t * ray.Direction;
-                glm::vec3 newLoc = hitPt - DragHitOffset;
-                newLoc.y         = DragPlaneY; // keep Y fixed
-
-                FTransform trans = actor->GetTransform();
-                trans.Location   = newLoc;
-                actor->SetTransform(trans);
-            }
-        }
-    }
-
-    // ----------------------------------------------------------------
-    // Init helpers
-    // ----------------------------------------------------------------
-    bool InitGLFW()
-    {
-        if (!glfwInit()) return false;
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-        m_Window = glfwCreateWindow(m_Width, m_Height, m_Title.c_str(), NULL, NULL);
-        if (!m_Window) { glfwTerminate(); return false; }
-        glfwMakeContextCurrent(m_Window);
-        glfwSwapInterval(1);
-        return true;
-    }
-
-    bool InitGLAD()
-    {
-        return gladLoadGLLoader((GLADloadproc)glfwGetProcAddress) != 0;
-    }
-
-    void InitImGui()
-    {
-        IMGUI_CHECKVERSION();
-        ImGui::CreateContext();
-        ImGuiIO& io = ImGui::GetIO(); (void)io;
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
-        ImGui::StyleColorsDark();
-        ImGui_ImplGlfw_InitForOpenGL(m_Window, true);
-        ImGui_ImplOpenGL3_Init("#version 330 core");
-    }
-
-    void CompileShaders()
-    {
-        int  success;
-        char infoLog[512];
-
-        unsigned int vs = glCreateShader(GL_VERTEX_SHADER);
-        glShaderSource(vs, 1, &vertexShaderSource, NULL);
-        glCompileShader(vs);
-        glGetShaderiv(vs, GL_COMPILE_STATUS, &success);
-        if (!success) { glGetShaderInfoLog(vs, 512, NULL, infoLog); std::cerr << "[ERROR] VS: " << infoLog << "\n"; }
-
-        unsigned int fs = glCreateShader(GL_FRAGMENT_SHADER);
-        glShaderSource(fs, 1, &fragmentShaderSource, NULL);
-        glCompileShader(fs);
-        glGetShaderiv(fs, GL_COMPILE_STATUS, &success);
-        if (!success) { glGetShaderInfoLog(fs, 512, NULL, infoLog); std::cerr << "[ERROR] FS: " << infoLog << "\n"; }
-
-        ShaderProgram = glCreateProgram();
-        glAttachShader(ShaderProgram, vs);
-        glAttachShader(ShaderProgram, fs);
-        glLinkProgram(ShaderProgram);
-        glGetProgramiv(ShaderProgram, GL_LINK_STATUS, &success);
-        if (!success) { glGetProgramInfoLog(ShaderProgram, 512, NULL, infoLog); std::cerr << "[ERROR] Link: " << infoLog << "\n"; }
-
-        glDeleteShader(vs);
-        glDeleteShader(fs);
-    }
-
-    void Shutdown()
-    {
-        if (m_Window)
-        {
-            WorldActors.clear();
-            if (FBO)          glDeleteFramebuffers(1,  &FBO);
-            if (TextureColor) glDeleteTextures(1,       &TextureColor);
-            if (RBO)          glDeleteRenderbuffers(1,  &RBO);
-            ImGui_ImplOpenGL3_Shutdown();
-            ImGui_ImplGlfw_Shutdown();
-            ImGui::DestroyContext();
-            glfwDestroyWindow(m_Window);
-            glfwTerminate();
-            m_Window = nullptr;
-        }
-    }
-
-    // ----------------------------------------------------------------
-    // Frame
-    // ----------------------------------------------------------------
+    // ============================================================
+    //  Frame
+    // ============================================================
     void BeginFrame()
     {
         ImGui_ImplOpenGL3_NewFrame();
@@ -423,40 +533,46 @@ private:
 
     void RenderWorld(int viewW, int viewH)
     {
-        float aspect = (viewH > 0) ? (float)viewW / (float)viewH : 1.0f;
+        float aspect   = (viewH > 0) ? (float)viewW / (float)viewH : 1.0f;
         LastProjection = glm::perspective(glm::radians(60.0f), aspect, 0.1f, 1000.0f);
         LastView       = Cam.GetViewMatrix();
 
         glBindFramebuffer(GL_FRAMEBUFFER, FBO);
         glViewport(0, 0, viewW, viewH);
         glEnable(GL_DEPTH_TEST);
-        glClearColor(0.12f, 0.18f, 0.25f, 1.0f);
+        glClearColor(0.10f, 0.13f, 0.18f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        glUseProgram(ShaderProgram);
-        glUniformMatrix4fv(glGetUniformLocation(ShaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(LastProjection));
-        glUniformMatrix4fv(glGetUniformLocation(ShaderProgram, "view"),       1, GL_FALSE, glm::value_ptr(LastView));
-
-        for (int i = 0; i < (int)WorldActors.size(); ++i)
+        if (Shader)
         {
-            auto& Actor = WorldActors[i];
-            if (!Actor) continue;
+            Shader->Use();
+            Shader->SetMat4("projection", LastProjection);
+            Shader->SetMat4("view", LastView);
 
-            bool isFloor    = (Actor->GetName() == "Floor");
-            bool isSelected = (i == SelectedActorIndex);
-
-            glm::vec3 color = isFloor ? glm::vec3(0.45f, 0.50f, 0.45f)
-                                      : glm::vec3(0.45f, 0.65f, 0.90f);
-            glUniform3fv(glGetUniformLocation(ShaderProgram, "objectColor"), 1, glm::value_ptr(color));
-            glUniform1i(glGetUniformLocation(ShaderProgram, "bSelected"), isSelected ? 1 : 0);
-
-            for (auto& Comp : Actor->GetComponents())
+            for (int i = 0; i < (int)WorldActors.size(); ++i)
             {
-                if (auto PC = Cast<UPrimitiveComponent>(Comp))
+                auto& Actor = WorldActors[i];
+                if (!Actor) continue;
+
+                bool isFloor    = (Actor->GetName() == "Floor");
+                bool isSelected = (i == SelectedActorIndex);
+
+                glm::vec3 color = isFloor
+                    ? glm::vec3(0.35f, 0.42f, 0.35f)
+                    : glm::vec3(0.40f, 0.65f, 0.95f);
+
+                Shader->SetVec3("objectColor", color);
+                Shader->SetBool("bSelected", isSelected);
+
+                for (auto& Comp : Actor->GetComponents())
                 {
-                    FMatrix M = MakeTransformMatrix(PC->GetTransform());
-                    glUniformMatrix4fv(glGetUniformLocation(ShaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(M));
-                    PC->Render();
+                    if (auto PC = Cast<UPrimitiveComponent>(Comp))
+                    {
+                        // 렌더링 시 Transform은 Actor의 RootComponent(물리 결과 반영됨)를 사용
+                        FMatrix M = MakeTransformMatrix(Actor->GetTransform());
+                        Shader->SetMat4("model", M);
+                        PC->Render();
+                    }
                 }
             }
         }
@@ -465,45 +581,20 @@ private:
 
     void RenderUI(float DeltaTime)
     {
-        // ---- World Outliner ----
-        ImGui::Begin("World Outliner");
-        if (ImGui::Button("+ Add Cube"))
-        {
-            SpawnCube("Cube_" + std::to_string(CubeCount++), FVector(0.0f, 0.5f, 0.0f));
-        }
-        ImGui::Separator();
-        for (int i = 0; i < (int)WorldActors.size(); ++i)
-        {
-            auto& Actor = WorldActors[i];
-            if (!Actor) continue;
-            bool sel = (SelectedActorIndex == i);
-            if (ImGui::Selectable(Actor->GetName().c_str(), sel))
-                SelectedActorIndex = i;
-        }
-        ImGui::End();
+        // ---- World Settings 패널 (백엔드 전환) ----
+        RenderWorldSettingsPanel();
 
-        // ---- Details ----
-        ImGui::Begin("Details");
-        if (SelectedActorIndex >= 0 && SelectedActorIndex < (int)WorldActors.size())
-        {
-            auto& Actor = WorldActors[SelectedActorIndex];
-            if (Actor)
-            {
-                ImGui::Text("Actor: %s", Actor->GetName().c_str());
-                ImGui::Separator();
-                FTransform t = Actor->GetTransform();
-                bool changed = false;
-                changed |= ImGui::DragFloat3("Location", &t.Location.x, 0.05f);
-                changed |= ImGui::DragFloat3("Rotation", &t.Rotation.x, 1.0f);
-                changed |= ImGui::DragFloat3("Scale",    &t.Scale3D.x,  0.05f, 0.01f, 100.0f);
-                if (changed) Actor->SetTransform(t);
-            }
-        }
-        else
-        {
-            ImGui::TextDisabled("Select an actor");
-        }
-        ImGui::End();
+        // ---- World Outliner (에디터 패널) ----
+        WorldOutliner->RenderUI(
+            WorldActors,
+            SelectedActorIndex,
+            [this]() {
+                SpawnCube("Cube_" + std::to_string(CubeCount++),
+                          FVector(0.0f, 3.0f, 0.0f));
+            });
+
+        // ---- Details Panel (에디터 패널) ----
+        DetailsPanel->RenderUI(WorldActors, SelectedActorIndex);
 
         // ---- 3D Viewport ----
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
@@ -513,27 +604,23 @@ private:
         int viewW = (int)vpSize.x;
         int viewH = (int)vpSize.y;
 
-        // Resize FBO to match viewport content size
         if (viewW > 0 && viewH > 0 && (viewW != TexWidth || viewH != TexHeight))
             CreateFBO(viewW, viewH);
 
-        // Render 3D scene into FBO
         if (viewW > 0 && viewH > 0)
             RenderWorld(viewW, viewH);
 
-        // Display FBO texture
         ImGui::Image((void*)(intptr_t)TextureColor,
                      ImVec2((float)TexWidth, (float)TexHeight),
                      ImVec2(0, 1), ImVec2(1, 0));
 
-        // Screen position of the image (top-left corner) for local mouse coords
-        ImVec2 vpOrigin = ImGui::GetItemRectMin();
+        ImVec2 vpOrigin    = ImGui::GetItemRectMin();
         bool   vpHovered   = ImGui::IsItemHovered();
         ImVec2 mouseScreen = ImGui::GetMousePos();
-        float  lmx = mouseScreen.x - vpOrigin.x; // local X within viewport image
-        float  lmy = mouseScreen.y - vpOrigin.y; // local Y within viewport image
+        float  lmx = mouseScreen.x - vpOrigin.x;
+        float  lmy = mouseScreen.y - vpOrigin.y;
 
-        // ---- RIGHT CLICK: camera orbit + WASD ----
+        // ---- RIGHT CLICK: 카메라 오빗 + WASD ----
         bool rmbDown = ImGui::IsMouseDown(ImGuiMouseButton_Right);
         if (vpHovered && rmbDown)
         {
@@ -553,20 +640,15 @@ private:
             if (ImGui::IsKeyDown(ImGuiKey_Q)) Cam.Position -= Cam.WorldUp * speed;
         }
 
-        // ---- LEFT CLICK: select actor in viewport ----
+        // ---- LEFT CLICK: Actor 픽킹 (물리 Raycast 활용) ----
         bool lmbClicked  = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
-        bool lmbDown     = ImGui::IsMouseDown(ImGuiMouseButton_Left);
         bool lmbReleased = ImGui::IsMouseReleased(ImGuiMouseButton_Left);
 
-        // On click: ray-cast to select (only if not starting a drag immediately)
         if (vpHovered && lmbClicked && viewW > 0 && viewH > 0)
-        {
             TrySelectActorAtMouse(lmx, lmy, viewW, viewH);
-        }
 
-        // ---- LEFT DRAG: move selected actor along XZ plane ----
+        // ---- LEFT DRAG: 선택된 Actor 이동 ----
         bool isDragging = ImGui::IsMouseDragging(ImGuiMouseButton_Left, 4.0f);
-
         if (isDragging && vpHovered && SelectedActorIndex >= 0 && !rmbDown)
         {
             if (!bIsDraggingActor)
@@ -574,20 +656,139 @@ private:
             else
                 UpdateActorDrag(lmx, lmy, viewW, viewH);
         }
-
         if (lmbReleased)
             bIsDraggingActor = false;
+
+        // ---- 우하단 물리 상태 오버레이 ----
+        RenderPhysicsStatusOverlay(vpOrigin, vpSize);
 
         ImGui::End();
         ImGui::PopStyleVar();
 
-        // Clear main framebuffer
+        // 메인 framebuffer 클리어
         int fw, fh;
         glfwGetFramebufferSize(m_Window, &fw, &fh);
         glViewport(0, 0, fw, fh);
         glDisable(GL_DEPTH_TEST);
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
+    }
+
+    /** Viewport 우하단에 물리 상태 미니 오버레이 */
+    void RenderPhysicsStatusOverlay(ImVec2 vpOrigin, ImVec2 vpSize)
+    {
+        ImVec2 OverlayPos = ImVec2(
+            vpOrigin.x + vpSize.x - 200.0f,
+            vpOrigin.y + vpSize.y - 60.0f);
+        ImGui::SetNextWindowPos(OverlayPos, ImGuiCond_Always);
+        ImGui::SetNextWindowBgAlpha(0.55f);
+        ImGuiWindowFlags flags =
+            ImGuiWindowFlags_NoDecoration |
+            ImGuiWindowFlags_NoInputs |
+            ImGuiWindowFlags_NoNav |
+            ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_NoBringToFrontOnFocus;
+
+        ImGui::SetNextWindowSize(ImVec2(195.0f, 50.0f), ImGuiCond_Always);
+        if (ImGui::Begin("##PhysOverlay", nullptr, flags))
+        {
+            FVector Gravity = PhysicsScene->GetGravity();
+            int PhysActorCount = 0;
+            for (auto& A : WorldActors)
+                if (A) for (auto& C : A->GetComponents())
+                    if (Cast<URigidBodyComponent>(C)) ++PhysActorCount;
+
+            // 현재 백엔드 이름 동적 표시
+            const char* BackendName = (CurrentBackend == EPhysicsBackend::AVBD)
+                                      ? "AVBD" : "Null";
+            ImVec4 BackendColor = (CurrentBackend == EPhysicsBackend::AVBD)
+                                  ? ImVec4(1.0f, 0.85f, 0.3f, 1.0f)   // 노랑 (AVBD)
+                                  : ImVec4(0.5f, 1.0f,  0.5f, 1.0f);  // 초록 (Null)
+            ImGui::TextColored(BackendColor, "Physics: %s Backend", BackendName);
+            ImGui::Text("Bodies: %d  G: %.1f", PhysActorCount, Gravity.y);
+        }
+        ImGui::End();
+    }
+
+    // ============================================================
+    //  World Settings 패널
+    //  물리 백엔드 전환 + 중력 + AVBD 전용 파라미터 편집
+    // ============================================================
+    void RenderWorldSettingsPanel()
+    {
+        ImGui::Begin("World Settings");
+
+        // ---- Physics Backend 선택 ----
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.75f, 0.3f, 1.0f));
+        ImGui::Text("Physics Backend");
+        ImGui::PopStyleColor();
+        ImGui::Separator();
+
+        bool bIsNull = (CurrentBackend == EPhysicsBackend::Null);
+        bool bIsAVBD = (CurrentBackend == EPhysicsBackend::AVBD);
+
+        // Null 버튼
+        if (bIsNull)
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.55f, 0.2f, 0.9f));
+        if (ImGui::Button("  Null (Simple Euler)  "))
+            RequestSwitchPhysicsBackend(EPhysicsBackend::Null);
+        if (bIsNull) ImGui::PopStyleColor();
+
+        ImGui::SameLine();
+
+        // AVBD 버튼
+        if (bIsAVBD)
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.4f, 0.1f, 0.9f));
+        if (ImGui::Button("  AVBD (Constraint)  "))
+            RequestSwitchPhysicsBackend(EPhysicsBackend::AVBD);
+        if (bIsAVBD) ImGui::PopStyleColor();
+
+        // ---- 중력 ----
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Text("Gravity");
+        ImGui::PushItemWidth(150.0f);
+        if (ImGui::DragFloat("Y##Gravity", &WorldGravityY, 0.1f, -50.0f, 0.0f, "%.2f m/s2"))
+            PhysicsScene->SetGravity(FVector(0.0f, WorldGravityY, 0.0f));
+        ImGui::PopItemWidth();
+
+        // ---- AVBD 전용 파라미터 (AVBD 선택 시에만 표시) ----
+        if (CurrentBackend == EPhysicsBackend::AVBD)
+        {
+            ImGui::Spacing();
+            ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.5f, 0.35f, 0.1f, 0.5f));
+            bool open = ImGui::CollapsingHeader("AVBD Solver Options",
+                                                ImGuiTreeNodeFlags_DefaultOpen);
+            ImGui::PopStyleColor();
+            if (open)
+            {
+                // Config에 접근하기 위해 dynamic_cast (에디터 전용)
+                if (AVBDPhysicsScene* AVBDScene =
+                        dynamic_cast<AVBDPhysicsScene*>(PhysicsScene.get()))
+                {
+                    FAVBDConfig& Cfg = AVBDScene->Config;
+
+                    ImGui::PushItemWidth(120.0f);
+                    ImGui::DragInt  ("Solver Iterations", &Cfg.SolverIterations,
+                                     1, 1, 32);
+                    ImGui::DragFloat("Restitution",  &Cfg.Restitution,
+                                     0.01f, 0.0f, 1.0f, "%.3f");
+                    ImGui::DragFloat("Friction",     &Cfg.Friction,
+                                     0.01f, 0.0f, 2.0f, "%.3f");
+                    ImGui::DragFloat("Baumgarte",    &Cfg.BaumgarteCoeff,
+                                     0.01f, 0.0f, 1.0f, "%.3f");
+                    ImGui::DragFloat("Penetr. Slop", &Cfg.PenetrationSlop,
+                                     0.001f, 0.0f, 0.1f, "%.4f");
+                    ImGui::PopItemWidth();
+
+                    ImGui::Spacing();
+                    ImGui::TextDisabled("Contacts this frame: --");
+                    ImGui::TextDisabled("Body-body collisions: enabled");
+                }
+            }
+        }
+
+        ImGui::End();
     }
 
     void EndFrame()
@@ -606,35 +807,55 @@ private:
         glfwSwapBuffers(m_Window);
     }
 
-private:
+    // ============================================================
+    //  Members
+    // ============================================================
     int         m_Width, m_Height;
     std::string m_Title;
     GLFWwindow* m_Window;
     float       LastFrameTime = 0.0f;
-    unsigned int ShaderProgram;
+    TSharedPtr<UShader> Shader;
 
+    // ---- World ----
     std::vector<TSharedPtr<AActor>> WorldActors;
-    int  SelectedActorIndex = -1;
-    int  CubeCount  = 1;
+    int SelectedActorIndex = -1;
+    int CubeCount          = 1;
 
     FCamera Cam;
-
-    // Last frame's matrices (needed for ray casting in UI pass)
     glm::mat4 LastProjection = glm::mat4(1.0f);
     glm::mat4 LastView       = glm::mat4(1.0f);
 
-    // Actor drag state
+    // ---- Physics ----
+    std::unique_ptr<IPhysicsSystem> PhysicsSystem;  // 구현체 몰라도 됨
+    std::unique_ptr<IPhysicsScene>  PhysicsScene;   // 구현체 몰라도 됨
+    float           PhysicsAccumulator  = 0.0f;
+    EPhysicsBackend CurrentBackend      = EPhysicsBackend::Null;
+    float           WorldGravityY       = -9.81f;   // World Settings 슬라이더용
+
+    // 백엔드 전환 요청 (Tick 시작 직전에 안전하게 처리)
+    bool            bPendingBackendSwitch = false;
+    EPhysicsBackend PendingBackend        = EPhysicsBackend::Null;
+
+    // ---- Editor ----
+    std::unique_ptr<UWorldOutliner> WorldOutliner;
+    std::unique_ptr<UDetailsPanel>  DetailsPanel;
+
+    // ---- Drag State ----
     bool      bIsDraggingActor = false;
     float     DragPlaneY       = 0.0f;
     glm::vec3 DragHitOffset    = glm::vec3(0.0f);
 
+    // ---- FBO ----
     unsigned int FBO, TextureColor, RBO;
     int TexWidth, TexHeight;
 };
 
+// ============================================================
+//  Entry Point
+// ============================================================
 int main()
 {
-    Application app(1600, 900, "Custom Engine");
+    UApplication app(1600, 900, "Custom Engine — Physics Edition");
     if (!app.Init())
     {
         std::cerr << "Engine Initialization Failed\n";
