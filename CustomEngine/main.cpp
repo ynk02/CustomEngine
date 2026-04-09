@@ -111,7 +111,7 @@ public:
         Floor->SetTransform(FTransform(FVector(0,0,0), FRotator(0,0,0), FVector(1,1,1)));
         WorldActors.push_back(Floor);
 
-        // 기본 큐브 (물리 활성화)
+        // 기본 큐브 (물리 활성화) 
         SpawnCube("Cube_0", FVector(0.0f, 3.0f, 0.0f));
 
         LastFrameTime = (float)glfwGetTime();
@@ -588,9 +588,27 @@ private:
         WorldOutliner->RenderUI(
             WorldActors,
             SelectedActorIndex,
-            [this]() {
-                SpawnCube("Cube_" + std::to_string(CubeCount++),
-                          FVector(0.0f, 3.0f, 0.0f));
+            [this](const std::string& ActorType) {
+                if (ActorType == "Cube")
+                {
+                    SpawnCube("Cube_" + std::to_string(CubeCount++),
+                              FVector(0.0f, 3.0f, 0.0f));
+                }
+                else if (ActorType == "Floor")
+                {
+                    auto Floor = MakeShared<AFloorActor>();
+                    Floor->SetName("Floor_" + std::to_string(CubeCount++));
+                    Floor->SetTransform(FTransform(FVector(0,0,0), FRotator(0,0,0), FVector(1,1,1)));
+                    WorldActors.push_back(Floor);
+                    Floor->BeginPlay();
+                }
+                else if (ActorType == "Empty")
+                {
+                    auto EmptyActor = MakeShared<AActor>();
+                    EmptyActor->SetName("Empty_" + std::to_string(CubeCount++));
+                    WorldActors.push_back(EmptyActor);
+                    EmptyActor->BeginPlay();
+                }
             });
 
         // ---- Details Panel (에디터 패널) ----

@@ -18,19 +18,34 @@ public:
      * 매 프레임 RenderUI() 를 호출해 패널을 그림.
      * @param Actors           월드의 전체 Actor 배열
      * @param SelectedIndex    현재 선택된 인덱스 (in/out)
-     * @param OnSpawnCube      [+ Add Cube] 버튼 콜백
+     * @param OnSpawnActor     [+ Add] 버튼 드롭다운 선택 콜백
      */
     void RenderUI(
         const std::vector<TSharedPtr<AActor>>& Actors,
         int& SelectedIndex,
-        const std::function<void()>& OnSpawnCube)
+        const std::function<void(const std::string&)>& OnSpawnActor)
     {
         ImGui::Begin("World Outliner");
 
         // ---- 상단 툴바 ----
-        if (ImGui::Button("  + Add Cube  "))
+        if (ImGui::Button("  + Add  "))
         {
-            if (OnSpawnCube) OnSpawnCube();
+            ImGui::OpenPopup("AddActorPopup");
+        }
+        
+        if (ImGui::BeginPopup("AddActorPopup"))
+        {
+            ImGui::TextDisabled("Basic");
+            ImGui::Separator();
+            if (ImGui::Selectable("Empty Actor")) { if (OnSpawnActor) OnSpawnActor("Empty"); }
+            
+            ImGui::Spacing();
+            ImGui::TextDisabled("Shapes");
+            ImGui::Separator();
+            if (ImGui::Selectable("Cube")) { if (OnSpawnActor) OnSpawnActor("Cube"); }
+            if (ImGui::Selectable("Floor")) { if (OnSpawnActor) OnSpawnActor("Floor"); }
+            
+            ImGui::EndPopup();
         }
         ImGui::Separator();
 

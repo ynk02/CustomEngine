@@ -29,7 +29,7 @@ class IPhysicsSystem
 public:
     virtual ~IPhysicsSystem() = default;
 
-    /** 시스템 초기화 */
+    /* 시스템 초기화 */
     virtual bool Initialize() = 0;
 
     /** 시스템 종료 및 리소스 해제 */
@@ -42,9 +42,6 @@ public:
     virtual std::unique_ptr<IPhysicsScene> CreateScene() = 0;
 
     // ---- Static Factory (RHI::CreateDynamicRHI() 대응) ----
-    /**
-     * Backend에 따라 구체 시스템 인스턴스를 생성.
-     * main.cpp 등에서 단 한 번 호출 후 IPhysicsSystem 인터페이스로만 사용.
-     */
+
     static std::unique_ptr<IPhysicsSystem> Create(EPhysicsBackend Backend = EPhysicsBackend::Null);
 };

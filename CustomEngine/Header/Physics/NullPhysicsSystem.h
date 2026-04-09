@@ -47,7 +47,6 @@ public:
 
     void AddForce(const FVector& Force) override
     {
-        // F = ma  →  a = F/m  (누적, Simulate 단계에서 적분)
         Acceleration += Force / Mass;
     }
 

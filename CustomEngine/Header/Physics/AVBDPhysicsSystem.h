@@ -32,7 +32,7 @@ struct FContactConstraint
 {
     class AVBDPhysicsActor* BodyA        = nullptr;  // 항상 유효
     class AVBDPhysicsActor* BodyB        = nullptr;  // nullptr = 정적 바닥
-    FVector                 Normal;                  // BodyA → BodyB 충돌 법선
+    FVector                 Normal;                  // BodyB → BodyA 방향 (A를 밀어내는 법선)
     float                   Penetration  = 0.0f;     // 관통 깊이 (양수)
     float                   AccumLambda  = 0.0f;     // 누적 법선 충격량 (반복 clamping용)
 };
@@ -326,26 +326,29 @@ private:
                 C.BodyA = A;
                 C.BodyB = B;
 
+                // ★ Normal = B → A 방향 (A를 밀어내는 방향)
+                //   D = TB - TA, D.x > 0 이면 B가 오른쪽
+                //   → A는 왼쪽(-x)으로 밀려야 함
                 if (OvX <= OvY && OvX <= OvZ)
                 {
                     C.Penetration = OvX;
                     C.Normal      = (D.x > 0.0f)
-                                    ? FVector( 1.0f, 0.0f, 0.0f)
-                                    : FVector(-1.0f, 0.0f, 0.0f);
+                                    ? FVector(-1.0f, 0.0f, 0.0f)  // A를 왼쪽으로
+                                    : FVector( 1.0f, 0.0f, 0.0f); // A를 오른쪽으로
                 }
                 else if (OvY <= OvX && OvY <= OvZ)
                 {
                     C.Penetration = OvY;
                     C.Normal      = (D.y > 0.0f)
-                                    ? FVector(0.0f,  1.0f, 0.0f)
-                                    : FVector(0.0f, -1.0f, 0.0f);
+                                    ? FVector(0.0f, -1.0f, 0.0f)  // A를 아래로
+                                    : FVector(0.0f,  1.0f, 0.0f); // A를 위로
                 }
                 else
                 {
                     C.Penetration = OvZ;
                     C.Normal      = (D.z > 0.0f)
-                                    ? FVector(0.0f, 0.0f,  1.0f)
-                                    : FVector(0.0f, 0.0f, -1.0f);
+                                    ? FVector(0.0f, 0.0f, -1.0f)  // A를 앞으로
+                                    : FVector(0.0f, 0.0f,  1.0f); // A를 뒤로
                 }
 
                 Contacts.push_back(C);
@@ -380,7 +383,8 @@ private:
         FVector RelVel = VelA - VelB;
 
         // ── 법선 충격량 ─────────────────────────────────────────
-        float Jv = glm::dot(RelVel, C.Normal); // 음수 = 접근 중
+        // Normal은 B→A 방향. A가 B에 접근 중이면 dot(RelVel, Normal) < 0
+        float Jv = glm::dot(RelVel, C.Normal); // 음수 = A가 B에 접근 중
 
         // Baumgarte 안정화: 관통 깊이만큼 이번 스텝에서 속도로 보정
         float Baumgarte = (Config.BaumgarteCoeff / Dt)
