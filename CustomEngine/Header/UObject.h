@@ -1,10 +1,9 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include <memory>
 #include <string>
 #include <vector>
-
 
 template<typename T> using TSharedPtr = std::shared_ptr<T>;
 template<typename T> using TWeakPtr = std::weak_ptr<T>;
@@ -22,7 +21,6 @@ TSharedPtr<To> Cast(TSharedPtr<From> InPtr)
     return std::dynamic_pointer_cast<To>(InPtr);
 }
 
-// UObject Base Class
 class UObject : public std::enable_shared_from_this<UObject>
 {
 public:

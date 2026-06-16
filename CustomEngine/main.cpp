@@ -1,18 +1,4 @@
-// ============================================================
-//  main.cpp — Custom Engine Entry Point
-//  
-//  아키텍처 레이어:
-//    [Physics]   IPhysicsSystem → IPhysicsScene → IPhysicsActor
-//    [Actor]     AActor (URigidBodyComponent 소유) → Transform 동기화
-//    [Editor]    UWorldOutliner / UDetailsPanel → ImGui 패널
-//    [Renderer]  OpenGL + FBO → ImGui Viewport
-//
-//  Fixed-step 물리 vs. 가변 렌더 Tick 분리:
-//    PhysicsAccumulator 누적 → FixedStep 단위로 Simulate() 호출
-//    렌더/임구이는 매 프레임 실행
-// ============================================================
-
-#include <glad/glad.h>
+﻿#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include <string>
@@ -21,12 +7,10 @@
 #include <cfloat>
 #include <functional>
 
-// ImGui
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 
-// Engine Core
 #include "CoreMinimal.h"
 #include "UObject.h"
 #include "UActorComponent.h"
@@ -41,14 +25,13 @@
 #include "UShader.h"
 #include "URigidBodyComponent.h"
 
-// Physics Abstraction (인터페이스만 포함 — 구현체 모름)
 #include "Physics/IPhysicsSystem.h"
 #include "Physics/IPhysicsScene.h"
 #include "Physics/IPhysicsActor.h"
-// AVBD 설정 구조체 접근용 (에디터 Config 패널 한정)
+
+#include "Physics/XPBDPhysicsSystem.h"
 #include "Physics/AVBDPhysicsSystem.h"
 
-// Editor Panels
 #include "Editor/UWorldOutliner.h"
 #include "Editor/UDetailsPanel.h"
 
@@ -56,15 +39,8 @@
 #include <Assimp/scene.h>
 #include <Assimp/postprocess.h>
 
-// ============================================================
-//  Constants
-// ============================================================
-static constexpr float PHYSICS_FIXED_STEP = 1.0f / 60.0f; // 60Hz 물리 시뮬레이션
+static constexpr float PHYSICS_FIXED_STEP = 1.0f / 60.0f;
 
-
-// ============================================================
-//  UApplication
-// ============================================================
 class UApplication : public UObject
 {
 public:
@@ -92,7 +68,6 @@ public:
             if (app) app->RenderOneFrame(0.016f);
         });
 
-        // ---- 물리 시스템 초기화 (Factory — 인터페이스만 이후 사용됨) ----
         CurrentBackend = EPhysicsBackend::Null;
         PhysicsSystem  = IPhysicsSystem::Create(CurrentBackend);
         PhysicsSystem->Initialize();
@@ -100,18 +75,14 @@ public:
         PhysicsScene = PhysicsSystem->CreateScene();
         PhysicsScene->Initialize(FVector(0.0f, -9.81f, 0.0f));
 
-        // ---- 에디터 패널 생성 ----
         WorldOutliner = std::make_unique<UWorldOutliner>();
         DetailsPanel  = std::make_unique<UDetailsPanel>();
 
-        // ---- Default world setup ----
-        // 바닥 (Static — 물리 시뮬레이션 없음)
         auto Floor = MakeShared<AFloorActor>();
         Floor->SetName("Floor");
         Floor->SetTransform(FTransform(FVector(0,0,0), FRotator(0,0,0), FVector(1,1,1)));
         WorldActors.push_back(Floor);
 
-        // 기본 큐브 (물리 활성화) 
         SpawnCube("Cube_0", FVector(0.0f, 3.0f, 0.0f));
 
         LastFrameTime = (float)glfwGetTime();
@@ -128,22 +99,17 @@ public:
         while (!glfwWindowShouldClose(m_Window))
         {
             float now = (float)glfwGetTime();
-            float dt  = glm::clamp(now - LastFrameTime, 0.0f, 0.1f); // 최대 0.1s cap
+            float dt  = glm::clamp(now - LastFrameTime, 0.0f, 0.1f);
             LastFrameTime = now;
 
             glfwPollEvents();
 
-            // ── 백엔드 전환 요청 처리 (Tick 시작 전 안전한 시점) ──────
             if (bPendingBackendSwitch)
             {
                 DoSwitchPhysicsBackend(PendingBackend);
                 bPendingBackendSwitch = false;
             }
 
-            // ====================================================
-            //  Fixed-Step 물리 시뮬레이션 (렌더 Tick과 분리)
-            //  PhysicsAccumulator에 dt를 누적하고 고정 스텝마다 Simulate.
-            // ====================================================
             PhysicsAccumulator += dt;
             while (PhysicsAccumulator >= PHYSICS_FIXED_STEP)
             {
@@ -151,10 +117,6 @@ public:
                 PhysicsAccumulator -= PHYSICS_FIXED_STEP;
             }
 
-            // ====================================================
-            //  메인 Tick (렌더 프레임마다)
-            //  URigidBodyComponent::TickComponent()가 물리 결과 → Transform 동기화
-            // ====================================================
             for (auto& Actor : WorldActors)
                 if (Actor) Actor->Tick(dt);
 
@@ -170,9 +132,7 @@ public:
     }
 
 private:
-    // ============================================================
-    //  Spawn
-    // ============================================================
+
     void SpawnCube(const std::string& Name, const FVector& Location)
     {
         auto Cube = MakeShared<ACubeActor>();
@@ -181,10 +141,9 @@ private:
         FTransform InitialTransform(Location, FRotator(0,0,0), FVector(1,1,1));
         Cube->SetTransform(InitialTransform);
 
-        // ★ 물리 씬에 등록 (BeginPlay 전에 수행)
         if (URigidBodyComponent* RB = Cube->GetRigidBodyComponent())
         {
-            RB->SetHalfExtents(FVector(0.5f)); // 큐브 기본 반경
+            RB->SetHalfExtents(FVector(0.5f));
             RB->RegisterWithPhysicsScene(PhysicsScene.get(), InitialTransform);
         }
 
@@ -192,11 +151,6 @@ private:
         Cube->BeginPlay();
     }
 
-    // ============================================================
-    //  Physics Backend Runtime Switch
-    //  백엔드를 교체할 때 안전하게 씬을 재생성하고
-    //  모든 URigidBodyComponent를 새 씬에 재등록한다.
-    // ============================================================
     void RequestSwitchPhysicsBackend(EPhysicsBackend NewBackend)
     {
         if (NewBackend == CurrentBackend) return;
@@ -206,19 +160,17 @@ private:
 
     void DoSwitchPhysicsBackend(EPhysicsBackend NewBackend)
     {
-        // 1. 기존 씬 파괴 전에 모든 RigidBody 포인터 무효화
-        //    (URigidBodyComponent 소멸자가 RemoveActor 호출하지 않도록)
+
         for (auto& Actor : WorldActors)
         {
             if (!Actor) continue;
             for (auto& Comp : Actor->GetComponents())
             {
                 if (auto RB = Cast<URigidBodyComponent>(Comp))
-                    RB->DetachFromPhysicsScene(); // 포인터만 null, 씬은 별도 파괴
+                    RB->DetachFromPhysicsScene();
             }
         }
 
-        // 2. 새 System + Scene 생성
         PhysicsScene.reset();
         PhysicsSystem->Shutdown();
         PhysicsSystem = IPhysicsSystem::Create(NewBackend);
@@ -228,7 +180,6 @@ private:
         FVector Gravity = FVector(0.0f, WorldGravityY, 0.0f);
         PhysicsScene->Initialize(Gravity);
 
-        // 3. 모든 큐브를 새 씬에 재등록 (현재 Transform 유지, 속도 0)
         for (auto& Actor : WorldActors)
         {
             if (!Actor) continue;
@@ -244,9 +195,6 @@ private:
         PhysicsAccumulator = 0.0f;
     }
 
-    // ============================================================
-    //  Ray Helpers (Viewport 픽킹)
-    // ============================================================
     FRay ComputeRayFromMouse(float mouseX, float mouseY, int viewW, int viewH) const
     {
         float nx =  (mouseX / viewW) * 2.0f - 1.0f;
@@ -260,20 +208,15 @@ private:
         return { Cam.Position, rayWorld };
     }
 
-    /**
-     * ★ 물리 엔진의 Raycast를 사용해 Actor 픽킹.
-     * IPhysicsScene::Raycast() → FRaycastHit → Actor 역추적.
-     */
     void TrySelectActorAtMouse(float mouseX, float mouseY, int viewW, int viewH)
     {
         FRay Ray = ComputeRayFromMouse(mouseX, mouseY, viewW, viewH);
 
-        // 1. 물리 씬 Raycast (물리 컴포넌트가 등록된 Actor들 대상)
         FRaycastHit Hit = PhysicsScene->Raycast(Ray, 1000.0f);
 
         if (Hit.bHit && Hit.HitActor)
         {
-            // IPhysicsActor 포인터 → Actor 역추적
+
             int FoundIdx = FindActorByPhysicsActor(Hit.HitActor);
             if (FoundIdx >= 0)
             {
@@ -282,7 +225,6 @@ private:
             }
         }
 
-        // 2. 물리 Actor 없는 오브젝트(Floor 등) — 기존 AABB 폴백
         SelectedActorIndex = RaycastAABBFallback(Ray);
     }
 
@@ -303,7 +245,6 @@ private:
         return -1;
     }
 
-    // 물리 컴포넌트 없는 Actor용 AABB 폴백 (Floor 등)
     int RaycastAABBFallback(const FRay& Ray) const
     {
         float ClosestT  = FLT_MAX;
@@ -353,7 +294,6 @@ private:
         return ClosestIdx;
     }
 
-    // Actor Drag (물리 비활성화 중 or Kinematic 이동)
     void BeginActorDrag(float mouseX, float mouseY, int viewW, int viewH)
     {
         if (SelectedActorIndex < 0 || SelectedActorIndex >= (int)WorldActors.size()) return;
@@ -391,7 +331,6 @@ private:
                 FTransform Trans = Actor->GetTransform();
                 Trans.Location   = NewLoc;
 
-                // 물리 컴포넌트가 있으면 텔레포트 동기화
                 for (const auto& Comp : Actor->GetComponents())
                 {
                     if (auto RB = Cast<URigidBodyComponent>(Comp))
@@ -405,9 +344,6 @@ private:
         }
     }
 
-    // ============================================================
-    //  Init Helpers
-    // ============================================================
     bool InitGLFW()
     {
         if (!glfwInit()) return false;
@@ -436,7 +372,6 @@ private:
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
         ImGui::StyleColorsDark();
 
-        // 커스텀 스타일링
         ImGuiStyle& Style = ImGui::GetStyle();
         Style.WindowRounding   = 6.0f;
         Style.FrameRounding    = 4.0f;
@@ -470,7 +405,6 @@ private:
         {
             WorldActors.clear();
 
-            // 물리 시스템 종료 (Actor 전부 제거된 후)
             if (PhysicsScene) PhysicsScene.reset();
             if (PhysicsSystem) { PhysicsSystem->Shutdown(); PhysicsSystem.reset(); }
 
@@ -487,9 +421,6 @@ private:
         }
     }
 
-    // ============================================================
-    //  FBO
-    // ============================================================
     void CreateFBO(int w, int h)
     {
         if (FBO)          { glDeleteFramebuffers(1,  &FBO);          FBO = 0; }
@@ -520,9 +451,6 @@ private:
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
-    // ============================================================
-    //  Frame
-    // ============================================================
     void BeginFrame()
     {
         ImGui_ImplOpenGL3_NewFrame();
@@ -568,7 +496,7 @@ private:
                 {
                     if (auto PC = Cast<UPrimitiveComponent>(Comp))
                     {
-                        // 렌더링 시 Transform은 Actor의 RootComponent(물리 결과 반영됨)를 사용
+
                         FMatrix M = MakeTransformMatrix(Actor->GetTransform());
                         Shader->SetMat4("model", M);
                         PC->Render();
@@ -581,10 +509,9 @@ private:
 
     void RenderUI(float DeltaTime)
     {
-        // ---- World Settings 패널 (백엔드 전환) ----
+
         RenderWorldSettingsPanel();
 
-        // ---- World Outliner (에디터 패널) ----
         WorldOutliner->RenderUI(
             WorldActors,
             SelectedActorIndex,
@@ -611,10 +538,34 @@ private:
                 }
             });
 
-        // ---- Details Panel (에디터 패널) ----
-        DetailsPanel->RenderUI(WorldActors, SelectedActorIndex);
+        DetailsPanel->RenderUI(WorldActors, SelectedActorIndex,
+            [this](TSharedPtr<AActor> Actor, bool bEnable) {
+                if (bEnable)
+                {
+                    auto RB = MakeShared<URigidBodyComponent>();
+                    RB->SetName("RigidBody");
 
-        // ---- 3D Viewport ----
+                    Actor->SetRootComponent(RB.get());
+                    Actor->AddComponent(RB);
+
+                    RB->SetHalfExtents(FVector(0.5f));
+                    RB->RegisterWithPhysicsScene(PhysicsScene.get(), Actor->GetTransform());
+                    RB->BeginPlay();
+                }
+                else
+                {
+
+                    for (auto& Comp : Actor->GetComponents())
+                    {
+                        if (auto RB = dynamic_cast<URigidBodyComponent*>(Comp.get()))
+                        {
+                            Actor->RemoveComponent(RB);
+                            break;
+                        }
+                    }
+                }
+            });
+
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
         ImGui::Begin("3D Viewport");
 
@@ -638,7 +589,6 @@ private:
         float  lmx = mouseScreen.x - vpOrigin.x;
         float  lmy = mouseScreen.y - vpOrigin.y;
 
-        // ---- RIGHT CLICK: 카메라 오빗 + WASD ----
         bool rmbDown = ImGui::IsMouseDown(ImGuiMouseButton_Right);
         if (vpHovered && rmbDown)
         {
@@ -658,14 +608,12 @@ private:
             if (ImGui::IsKeyDown(ImGuiKey_Q)) Cam.Position -= Cam.WorldUp * speed;
         }
 
-        // ---- LEFT CLICK: Actor 픽킹 (물리 Raycast 활용) ----
         bool lmbClicked  = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
         bool lmbReleased = ImGui::IsMouseReleased(ImGuiMouseButton_Left);
 
         if (vpHovered && lmbClicked && viewW > 0 && viewH > 0)
             TrySelectActorAtMouse(lmx, lmy, viewW, viewH);
 
-        // ---- LEFT DRAG: 선택된 Actor 이동 ----
         bool isDragging = ImGui::IsMouseDragging(ImGuiMouseButton_Left, 4.0f);
         if (isDragging && vpHovered && SelectedActorIndex >= 0 && !rmbDown)
         {
@@ -677,13 +625,11 @@ private:
         if (lmbReleased)
             bIsDraggingActor = false;
 
-        // ---- 우하단 물리 상태 오버레이 ----
         RenderPhysicsStatusOverlay(vpOrigin, vpSize);
 
         ImGui::End();
         ImGui::PopStyleVar();
 
-        // 메인 framebuffer 클리어
         int fw, fh;
         glfwGetFramebufferSize(m_Window, &fw, &fh);
         glViewport(0, 0, fw, fh);
@@ -692,7 +638,6 @@ private:
         glClear(GL_COLOR_BUFFER_BIT);
     }
 
-    /** Viewport 우하단에 물리 상태 미니 오버레이 */
     void RenderPhysicsStatusOverlay(ImVec2 vpOrigin, ImVec2 vpSize)
     {
         ImVec2 OverlayPos = ImVec2(
@@ -716,52 +661,56 @@ private:
                 if (A) for (auto& C : A->GetComponents())
                     if (Cast<URigidBodyComponent>(C)) ++PhysActorCount;
 
-            // 현재 백엔드 이름 동적 표시
-            const char* BackendName = (CurrentBackend == EPhysicsBackend::AVBD)
-                                      ? "AVBD" : "Null";
-            ImVec4 BackendColor = (CurrentBackend == EPhysicsBackend::AVBD)
-                                  ? ImVec4(1.0f, 0.85f, 0.3f, 1.0f)   // 노랑 (AVBD)
-                                  : ImVec4(0.5f, 1.0f,  0.5f, 1.0f);  // 초록 (Null)
+            const char* BackendName = (CurrentBackend == EPhysicsBackend::AVBD) ? "AVBD" :
+                                      (CurrentBackend == EPhysicsBackend::XPBD) ? "XPBD" :
+                                      (CurrentBackend == EPhysicsBackend::Classical) ? "Classical" : "Null";
+
+            ImVec4 BackendColor = (CurrentBackend == EPhysicsBackend::AVBD) ? ImVec4(1.0f, 0.85f, 0.3f, 1.0f) :
+                                  (CurrentBackend == EPhysicsBackend::XPBD) ? ImVec4(0.4f, 0.8f, 1.0f, 1.0f) :
+                                  (CurrentBackend == EPhysicsBackend::Classical) ? ImVec4(0.8f, 0.4f, 0.8f, 1.0f) :
+                                  ImVec4(0.5f, 1.0f, 0.5f, 1.0f);
             ImGui::TextColored(BackendColor, "Physics: %s Backend", BackendName);
             ImGui::Text("Bodies: %d  G: %.1f", PhysActorCount, Gravity.y);
         }
         ImGui::End();
     }
 
-    // ============================================================
-    //  World Settings 패널
-    //  물리 백엔드 전환 + 중력 + AVBD 전용 파라미터 편집
-    // ============================================================
     void RenderWorldSettingsPanel()
     {
         ImGui::Begin("World Settings");
 
-        // ---- Physics Backend 선택 ----
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.75f, 0.3f, 1.0f));
         ImGui::Text("Physics Backend");
         ImGui::PopStyleColor();
         ImGui::Separator();
 
         bool bIsNull = (CurrentBackend == EPhysicsBackend::Null);
+        bool bIsClassical = (CurrentBackend == EPhysicsBackend::Classical);
+        bool bIsXPBD = (CurrentBackend == EPhysicsBackend::XPBD);
         bool bIsAVBD = (CurrentBackend == EPhysicsBackend::AVBD);
 
-        // Null 버튼
-        if (bIsNull)
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.55f, 0.2f, 0.9f));
-        if (ImGui::Button("  Null (Simple Euler)  "))
-            RequestSwitchPhysicsBackend(EPhysicsBackend::Null);
+        if (bIsNull) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.55f, 0.2f, 0.9f));
+        if (ImGui::Button("  Null  ")) RequestSwitchPhysicsBackend(EPhysicsBackend::Null);
         if (bIsNull) ImGui::PopStyleColor();
 
         ImGui::SameLine();
 
-        // AVBD 버튼
-        if (bIsAVBD)
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.4f, 0.1f, 0.9f));
-        if (ImGui::Button("  AVBD (Constraint)  "))
-            RequestSwitchPhysicsBackend(EPhysicsBackend::AVBD);
+        if (bIsClassical) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.2f, 0.6f, 0.9f));
+        if (ImGui::Button(" Classical ")) RequestSwitchPhysicsBackend(EPhysicsBackend::Classical);
+        if (bIsClassical) ImGui::PopStyleColor();
+
+        ImGui::SameLine();
+
+        if (bIsXPBD) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 0.9f));
+        if (ImGui::Button("  XPBD  ")) RequestSwitchPhysicsBackend(EPhysicsBackend::XPBD);
+        if (bIsXPBD) ImGui::PopStyleColor();
+
+        ImGui::SameLine();
+
+        if (bIsAVBD) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.4f, 0.1f, 0.9f));
+        if (ImGui::Button("  AVBD  ")) RequestSwitchPhysicsBackend(EPhysicsBackend::AVBD);
         if (bIsAVBD) ImGui::PopStyleColor();
 
-        // ---- 중력 ----
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Text("Gravity");
@@ -770,38 +719,46 @@ private:
             PhysicsScene->SetGravity(FVector(0.0f, WorldGravityY, 0.0f));
         ImGui::PopItemWidth();
 
-        // ---- AVBD 전용 파라미터 (AVBD 선택 시에만 표시) ----
         if (CurrentBackend == EPhysicsBackend::AVBD)
         {
             ImGui::Spacing();
             ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.5f, 0.35f, 0.1f, 0.5f));
-            bool open = ImGui::CollapsingHeader("AVBD Solver Options",
-                                                ImGuiTreeNodeFlags_DefaultOpen);
+            bool open = ImGui::CollapsingHeader("AVBD Solver Options", ImGuiTreeNodeFlags_DefaultOpen);
             ImGui::PopStyleColor();
             if (open)
             {
-                // Config에 접근하기 위해 dynamic_cast (에디터 전용)
-                if (AVBDPhysicsScene* AVBDScene =
-                        dynamic_cast<AVBDPhysicsScene*>(PhysicsScene.get()))
+                if (AVBDPhysicsScene* AVBDScene = dynamic_cast<AVBDPhysicsScene*>(PhysicsScene.get()))
                 {
                     FAVBDConfig& Cfg = AVBDScene->Config;
-
                     ImGui::PushItemWidth(120.0f);
-                    ImGui::DragInt  ("Solver Iterations", &Cfg.SolverIterations,
-                                     1, 1, 32);
-                    ImGui::DragFloat("Restitution",  &Cfg.Restitution,
-                                     0.01f, 0.0f, 1.0f, "%.3f");
-                    ImGui::DragFloat("Friction",     &Cfg.Friction,
-                                     0.01f, 0.0f, 2.0f, "%.3f");
-                    ImGui::DragFloat("Baumgarte",    &Cfg.BaumgarteCoeff,
-                                     0.01f, 0.0f, 1.0f, "%.3f");
-                    ImGui::DragFloat("Penetr. Slop", &Cfg.PenetrationSlop,
-                                     0.001f, 0.0f, 0.1f, "%.4f");
+                    ImGui::DragInt  ("Iterations", &Cfg.SolverIterations, 1, 1, 64);
+                    ImGui::DragFloat("Alpha (Stab)",  &Cfg.Alpha, 0.01f, 0.0f, 1.0f, "%.3f");
+                    ImGui::DragFloat("Beta Lin",      &Cfg.BetaLin, 10.0f, 0.0f, 100000.0f, "%.1f");
+                    ImGui::DragFloat("Beta Ang",      &Cfg.BetaAng, 1.0f, 0.0f, 10000.0f, "%.1f");
+                    ImGui::DragFloat("Gamma (Warm)",  &Cfg.Gamma, 0.001f, 0.0f, 1.0f, "%.4f");
+                    ImGui::DragFloat("Friction", &Cfg.DefaultFriction, 0.01f, 0.0f, 2.0f, "%.3f");
                     ImGui::PopItemWidth();
+                }
+            }
+        }
 
-                    ImGui::Spacing();
-                    ImGui::TextDisabled("Contacts this frame: --");
-                    ImGui::TextDisabled("Body-body collisions: enabled");
+        else if (CurrentBackend == EPhysicsBackend::XPBD)
+        {
+            ImGui::Spacing();
+            ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.1f, 0.35f, 0.5f, 0.5f));
+            bool open = ImGui::CollapsingHeader("XPBD Solver Options", ImGuiTreeNodeFlags_DefaultOpen);
+            ImGui::PopStyleColor();
+            if (open)
+            {
+                if (XPBDPhysicsScene* XPBDScene = dynamic_cast<XPBDPhysicsScene*>(PhysicsScene.get()))
+                {
+                    FXPBDConfig& Cfg = XPBDScene->Config;
+                    ImGui::PushItemWidth(120.0f);
+                    ImGui::DragInt  ("Iterations", &Cfg.SolverIterations, 1, 1, 64);
+                    ImGui::DragFloat("Compliance", &Cfg.Compliance, 0.0001f, 0.0f, 0.1f, "%.5f");
+                    ImGui::DragFloat("Restitution", &Cfg.Restitution, 0.01f, 0.0f, 1.0f, "%.3f");
+                    ImGui::DragFloat("Friction", &Cfg.Friction, 0.01f, 0.0f, 2.0f, "%.3f");
+                    ImGui::PopItemWidth();
                 }
             }
         }
@@ -825,16 +782,12 @@ private:
         glfwSwapBuffers(m_Window);
     }
 
-    // ============================================================
-    //  Members
-    // ============================================================
     int         m_Width, m_Height;
     std::string m_Title;
     GLFWwindow* m_Window;
     float       LastFrameTime = 0.0f;
     TSharedPtr<UShader> Shader;
 
-    // ---- World ----
     std::vector<TSharedPtr<AActor>> WorldActors;
     int SelectedActorIndex = -1;
     int CubeCount          = 1;
@@ -843,34 +796,26 @@ private:
     glm::mat4 LastProjection = glm::mat4(1.0f);
     glm::mat4 LastView       = glm::mat4(1.0f);
 
-    // ---- Physics ----
-    std::unique_ptr<IPhysicsSystem> PhysicsSystem;  // 구현체 몰라도 됨
-    std::unique_ptr<IPhysicsScene>  PhysicsScene;   // 구현체 몰라도 됨
+    std::unique_ptr<IPhysicsSystem> PhysicsSystem;
+    std::unique_ptr<IPhysicsScene>  PhysicsScene;
     float           PhysicsAccumulator  = 0.0f;
     EPhysicsBackend CurrentBackend      = EPhysicsBackend::Null;
-    float           WorldGravityY       = -9.81f;   // World Settings 슬라이더용
+    float           WorldGravityY       = -9.81f;
 
-    // 백엔드 전환 요청 (Tick 시작 직전에 안전하게 처리)
     bool            bPendingBackendSwitch = false;
     EPhysicsBackend PendingBackend        = EPhysicsBackend::Null;
 
-    // ---- Editor ----
     std::unique_ptr<UWorldOutliner> WorldOutliner;
     std::unique_ptr<UDetailsPanel>  DetailsPanel;
 
-    // ---- Drag State ----
     bool      bIsDraggingActor = false;
     float     DragPlaneY       = 0.0f;
     glm::vec3 DragHitOffset    = glm::vec3(0.0f);
 
-    // ---- FBO ----
     unsigned int FBO, TextureColor, RBO;
     int TexWidth, TexHeight;
 };
 
-// ============================================================
-//  Entry Point
-// ============================================================
 int main()
 {
     UApplication app(1600, 900, "Custom Engine — Physics Edition");

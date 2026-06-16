@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "UObject.h"
 #include <glad/glad.h>
@@ -13,7 +13,7 @@ public:
     uint32_t ProgramID = 0;
 
     UShader() = default;
-    
+
     virtual ~UShader()
     {
         if (ProgramID != 0)
@@ -73,18 +73,18 @@ private:
         vShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
         fShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
 
-        try 
+        try
         {
             vShaderFile.open(vertexPath);
             fShaderFile.open(fragmentPath);
             std::stringstream vShaderStream, fShaderStream;
-            
+
             vShaderStream << vShaderFile.rdbuf();
             fShaderStream << fShaderFile.rdbuf();
-            
+
             vShaderFile.close();
             fShaderFile.close();
-            
+
             vertexCode = vShaderStream.str();
             fragmentCode = fShaderStream.str();
         }
@@ -100,7 +100,6 @@ private:
         int success;
         char infoLog[512];
 
-        // Vertex Shader
         vertex = glCreateShader(GL_VERTEX_SHADER);
         glShaderSource(vertex, 1, &vShaderCode, NULL);
         glCompileShader(vertex);
@@ -111,7 +110,6 @@ private:
             std::cerr << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
         }
 
-        // Fragment Shader
         fragment = glCreateShader(GL_FRAGMENT_SHADER);
         glShaderSource(fragment, 1, &fShaderCode, NULL);
         glCompileShader(fragment);
@@ -122,7 +120,6 @@ private:
             std::cerr << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
         }
 
-        // Shader Program
         uint32_t ShaderProgram = glCreateProgram();
         glAttachShader(ShaderProgram, vertex);
         glAttachShader(ShaderProgram, fragment);

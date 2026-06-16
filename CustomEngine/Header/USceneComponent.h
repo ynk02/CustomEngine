@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "UActorComponent.h"
 #include "CoreMinimal.h"
@@ -18,7 +18,6 @@ public:
 
     FRotator GetRotation() const { return ComponentTransform.Rotation; }
     void SetRotation(const FRotator& InRotation) { ComponentTransform.Rotation = InRotation; }
-
 
     void SetupAttachment(USceneComponent* InParent)
     {

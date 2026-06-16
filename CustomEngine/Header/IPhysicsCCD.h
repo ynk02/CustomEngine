@@ -1,8 +1,4 @@
-#pragma once
-
-
-
-
+﻿#pragma once
 
 class IPhysicsCCD
 {
@@ -14,7 +10,8 @@ public:
 
 	virtual bool IsCCDEnabled() const = 0;
 
+	virtual void SetCCDMaxSubSteps(int MaxSubSteps) = 0;
 
-
+	virtual int GetCCDMaxSubSteps() const = 0;
 
 };

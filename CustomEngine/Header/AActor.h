@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "UObject.h"
 #include "USceneComponent.h"
@@ -43,17 +43,45 @@ public:
         if (USceneComponent* Root = GetRootComponent()) return Root->GetTransform();
         return FTransform();
     }
-    
+
     void SetTransform(const FTransform& NewTransform)
     {
         if (USceneComponent* Root = GetRootComponent()) Root->SetTransform(NewTransform);
     }
-    
 
     void AddComponent(TSharedPtr<UActorComponent> Component)
     {
         Components.push_back(Component);
         Component->SetOuter(this);
+    }
+
+    void RemoveComponent(UActorComponent* ComponentToRemove)
+    {
+        auto it = std::remove_if(Components.begin(), Components.end(),
+            [ComponentToRemove](const TSharedPtr<UActorComponent>& Comp) {
+                return Comp.get() == ComponentToRemove;
+            });
+
+        if (it != Components.end())
+        {
+            if (RootComponent == ComponentToRemove)
+            {
+
+                RootComponent = nullptr;
+                for (auto& Comp : Components)
+                {
+                    if (Comp.get() != ComponentToRemove)
+                    {
+                        if (auto SceneComp = dynamic_cast<USceneComponent*>(Comp.get()))
+                        {
+                            RootComponent = SceneComp;
+                            break;
+                        }
+                    }
+                }
+            }
+            Components.erase(it, Components.end());
+        }
     }
 
     template <typename T>

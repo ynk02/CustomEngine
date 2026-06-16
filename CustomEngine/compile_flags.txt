@@ -1,0 +1,16 @@
+-I
+C:\cg2\include
+-I
+C:\Users\user\source\repos\CustomEngine\CustomEngine
+-I
+C:\Users\user\source\repos\CustomEngine\CustomEngine\Dependencies\include
+-I
+C:\Users\user\source\repos\CustomEngine\CustomEngine\ImGui
+-I
+C:\Users\user\source\repos\CustomEngine\CustomEngine\openGL
+-I
+C:\Users\user\source\repos\CustomEngine\CustomEngine\Header
+-I
+C:\Users\user\source\repos\CustomEngine\CustomEngine\include
+-std=c++17
+-xc++

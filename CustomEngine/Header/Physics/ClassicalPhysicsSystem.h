@@ -6,10 +6,10 @@
 #include <algorithm>
 #include <cfloat>
 
-class NullPhysicsActor final : public IPhysicsActor
+class ClassicalPhysicsActor final : public IPhysicsActor
 {
 public:
-    explicit NullPhysicsActor(const FPhysicsActorDesc& Desc)
+    explicit ClassicalPhysicsActor(const FPhysicsActorDesc& Desc)
         : Transform(Desc.InitialTransform)
         , Mass(Desc.Mass)
         , bKinematic(Desc.bKinematic)
@@ -17,10 +17,15 @@ public:
         , LinearDamping(Desc.LinearDamping)
         , AngularDamping(Desc.AngularDamping)
         , HalfExtents(Desc.HalfExtents)
+        , LinearVelocity(0.0f)
     {}
 
     FTransform  GetTransform()  const override { return Transform; }
-    void        SetTransform(const FTransform& T) override { Transform = T; }
+    void        SetTransform(const FTransform& T) override
+    {
+        Transform = T;
+        LinearVelocity = FVector(0.0f);
+    }
 
     void  SetMass(float InMass)  override { Mass = (InMass > 0.0f) ? InMass : 0.001f; }
     float GetMass()        const override { return Mass; }
@@ -34,13 +39,46 @@ public:
     void  SetLinearDamping(float D)  override { LinearDamping  = D; }
     void  SetAngularDamping(float D) override { AngularDamping = D; }
 
-    void AddForce(const FVector& Force) override {  }
-    void AddImpulse(const FVector& Impulse) override {  }
+    void AddForce(const FVector& Force) override
+    {
+        Acceleration += Force / Mass;
+    }
 
-    FVector GetLinearVelocity()           const override { return FVector(0.0f); }
-    void    SetLinearVelocity(const FVector& V) override {  }
+    void AddImpulse(const FVector& Impulse) override
+    {
+        LinearVelocity += Impulse / Mass;
+    }
+
+    FVector GetLinearVelocity()           const override { return LinearVelocity; }
+    void    SetLinearVelocity(const FVector& V) override { LinearVelocity = V; }
 
     FVector GetHalfExtents() const override { return HalfExtents; }
+
+    void Step(float Dt, const FVector& Gravity)
+    {
+        if (!bSimulate || bKinematic) return;
+
+        Acceleration += Gravity;
+
+        LinearVelocity += Acceleration * Dt;
+        LinearVelocity *= (1.0f - LinearDamping * Dt);
+
+        Transform.Location += LinearVelocity * Dt;
+
+        Acceleration = FVector(0.0f);
+    }
+
+    void ResolveFloorCollision(float FloorY)
+    {
+        if (!bSimulate || bKinematic) return;
+        float bottom = Transform.Location.y - HalfExtents.y;
+        if (bottom < FloorY)
+        {
+            Transform.Location.y = FloorY + HalfExtents.y;
+            LinearVelocity.y = -LinearVelocity.y * 0.3f;
+            if (std::abs(LinearVelocity.y) < 0.05f) LinearVelocity.y = 0.0f;
+        }
+    }
 
 private:
     FTransform  Transform;
@@ -50,18 +88,23 @@ private:
     float       LinearDamping;
     float       AngularDamping;
     FVector     HalfExtents;
+    FVector     LinearVelocity;
+    FVector     Acceleration = FVector(0.0f);
 };
 
-class NullPhysicsScene final : public IPhysicsScene
+class ClassicalPhysicsScene final : public IPhysicsScene
 {
 public:
 
-    void Initialize(const FVector& Gravity = FVector(0.0f, -9.81f, 0.0f)) override {}
+    void Initialize(const FVector& Gravity = FVector(0.0f, -9.81f, 0.0f)) override
+    {
+        WorldGravity = Gravity;
+    }
 
     IPhysicsActor* CreateActor(const FPhysicsActorDesc& Desc) override
     {
-        auto Actor = std::make_unique<NullPhysicsActor>(Desc);
-        NullPhysicsActor* RawPtr = Actor.get();
+        auto Actor = std::make_unique<ClassicalPhysicsActor>(Desc);
+        ClassicalPhysicsActor* RawPtr = Actor.get();
         Actors.push_back(std::move(Actor));
         return RawPtr;
     }
@@ -70,13 +113,17 @@ public:
     {
         Actors.erase(
             std::remove_if(Actors.begin(), Actors.end(),
-                [Actor](const std::unique_ptr<NullPhysicsActor>& a) { return a.get() == Actor; }),
+                [Actor](const std::unique_ptr<ClassicalPhysicsActor>& a) { return a.get() == Actor; }),
             Actors.end());
     }
 
     void Simulate(float DeltaTime) override
     {
-
+        for (auto& Actor : Actors)
+        {
+            Actor->Step(DeltaTime, WorldGravity);
+            Actor->ResolveFloorCollision(0.0f);
+        }
     }
 
     FRaycastHit Raycast(const FRay& Ray, float MaxDistance) const override
@@ -128,14 +175,15 @@ public:
         return BestHit;
     }
 
-    void    SetGravity(const FVector& Gravity) override {}
-    FVector GetGravity()                 const override { return FVector(0.0f); }
+    void    SetGravity(const FVector& Gravity) override { WorldGravity = Gravity; }
+    FVector GetGravity()                 const override { return WorldGravity; }
 
 private:
-    std::vector<std::unique_ptr<NullPhysicsActor>> Actors;
+    std::vector<std::unique_ptr<ClassicalPhysicsActor>> Actors;
+    FVector WorldGravity = FVector(0.0f, -9.81f, 0.0f);
 };
 
-class NullPhysicsSystem final : public IPhysicsSystem
+class ClassicalPhysicsSystem final : public IPhysicsSystem
 {
 public:
     bool Initialize() override { return true; }
@@ -143,6 +191,6 @@ public:
 
     std::unique_ptr<IPhysicsScene> CreateScene() override
     {
-        return std::make_unique<NullPhysicsScene>();
+        return std::make_unique<ClassicalPhysicsScene>();
     }
 };

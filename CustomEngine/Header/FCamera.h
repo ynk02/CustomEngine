@@ -1,11 +1,7 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 
-// -----------------------------------------------------------------------
-// FCamera
-// Simple first-person / orbit camera with yaw-pitch rotation.
-// -----------------------------------------------------------------------
 struct FCamera
 {
     FVector Position   = { 0.0f,  3.0f, 10.0f };
@@ -18,7 +14,6 @@ struct FCamera
     FVector Right    = {  1.0f, 0.0f,  0.0f };
     FVector WorldUp  = {  0.0f, 1.0f,  0.0f };
 
-    /** Recalculate Front and Right from current Yaw / Pitch. */
     void UpdateVectors()
     {
         glm::vec3 front;

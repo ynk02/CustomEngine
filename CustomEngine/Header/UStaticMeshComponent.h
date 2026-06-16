@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "UPrimitiveComponent.h"
 #include <glad/glad.h>
@@ -90,12 +90,12 @@ public:
 
     void SetupPlaneMesh(float HalfSize = 10.0f)
     {
-        // Clean up existing buffers
+
         if (VAO) { glDeleteVertexArrays(1, &VAO); VAO = 0; }
         if (VBO) { glDeleteBuffers(1, &VBO); VBO = 0; }
 
         float h = HalfSize;
-        // Two triangles forming a large XZ plane (Y=0), normal pointing up
+
         float vertices[] = {
             -h, 0.0f, -h,  0.0f, 1.0f, 0.0f,
              h, 0.0f, -h,  0.0f, 1.0f, 0.0f,
